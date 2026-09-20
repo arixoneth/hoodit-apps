@@ -1,0 +1,74 @@
+{
+  "synthetic": true,
+  "responses": [
+    {
+      "tool": "hoodit_search_tokens",
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "query": "MOON",
+          "tokens": [
+            {
+              "token": {
+                "id": "0x3f08aace122ee2368432c1ca23a049bc640bafbf",
+                "kind": "erc20",
+                "symbol": "MOON",
+                "name": "MOON",
+                "decimals": 18,
+                "image_url": null
+              },
+              "match": "symbol",
+              "reference_pool": {
+                "pool_id": "0x4ec6ff55d62f5073eff873a88176a5bbb6e20aeec03948e4f2135d24f7cf07e4",
+                "dex_id": "uniswap-v3-robinhood",
+                "dex_name": "Uniswap V3 (Robinhood)"
+              },
+              "reference_price_usd": "0.014",
+              "reference_pool_liquidity_usd": "420000"
+            },
+            {
+              "token": {
+                "id": "0x0f6bffa9661cb5dd2f3f7b2929f33061f58a7ba7",
+                "kind": "erc20",
+                "symbol": "MOON",
+                "name": "MOON",
+                "decimals": 18,
+                "image_url": null
+              },
+              "match": "symbol",
+              "reference_pool": {
+                "pool_id": "0x6c0f0682d2815b5352875f090ef2bb21d2b46b971c13a8a48dcabc30263732ea",
+                "dex_id": "uniswap-v3-robinhood",
+                "dex_name": "Uniswap V3 (Robinhood)"
+              },
+              "reference_price_usd": "0.014",
+              "reference_pool_liquidity_usd": "420000"
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "returned": 2,
+            "next_page": null
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-20T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-20T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    }
+  ]
+}
