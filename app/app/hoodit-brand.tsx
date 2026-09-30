@@ -13,7 +13,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-const WELCOME_TITLE = "What are we trading on Robinhood Chain?";
+const WELCOME_TITLE = "What should we explore on Robinhood Chain?";
 const WELCOME_PLACEHOLDER = "Tell Hoodit what to trade…";
 const REPLY_PLACEHOLDER = "Reply to Hoodit…";
 
@@ -23,22 +23,21 @@ const SUGGESTIONS = [
     prompt: "Buy $100 of NVDA stock token on Robinhood Chain",
   },
   {
-    label: "What's TSLA trading at?",
-    prompt: "What is TSLA stock token trading at right now on Robinhood Chain?",
+    label: "Research TSLA on-chain",
+    prompt: "Show the on-chain market and liquidity for the canonical TSLA stock token on Robinhood Chain",
   },
   {
     label: "Show my Robinhood Chain balances",
     prompt:
-      "Show my wallet balances and stock token positions on Robinhood Chain",
+      "Show my wallet balances on Robinhood Chain without fetching valuation quotes",
   },
   {
     label: "Sell half my AAPL",
     prompt: "Sell half of my AAPL stock token position on Robinhood Chain",
   },
   {
-    label: "Buy NVDA on breakout, 3% stop",
-    prompt:
-      "Buy $500 of NVDA if it breaks today's high, and keep downside under 3%",
+    label: "Find active pools",
+    prompt: "Show the most active pools on Robinhood Chain and explain the liquidity and recent volume",
   },
 ];
 

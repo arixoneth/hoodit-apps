@@ -2,6 +2,8 @@
 **/target/
 /.cargo-home/
 /plugins/
+/output/
+__pycache__/
 .DS_Store
 
 # Landing page dependencies and build output

@@ -60,8 +60,8 @@ export function HooditLanding() {
           <div className="eyebrow"><span className="eyebrow-live"><i /> LIVE ON</span><strong>ROBINHOOD CHAIN</strong></div>
           <h1>Talk it.<br /><em>Trade it.</em></h1>
           <p className="hero-dek">
-            The AI trading bot that turns plain English into on-chain stock trades.
-            No command syntax. No tab switching. Just text Hoodit.
+            Research tokens, inspect your wallet, and turn plain English into
+            reviewable on-chain trades. No command syntax. Just text Hoodit.
           </p>
           <div className="hero-actions">
             <button className="primary-button" type="button" aria-pressed={qrFront} onClick={() => setQrFront(true)}>Scan to enter <span>↗</span></button>
@@ -69,7 +69,7 @@ export function HooditLanding() {
           </div>
           <div className="hero-proof">
             <div><strong>24/7</strong><span>AI desk</span></div>
-            <div><strong>GPT-5.6</strong><span>Reasoning model</span></div>
+            <div><strong>AOMI</strong><span>Agent runtime</span></div>
             <div><strong>ROBINHOOD</strong><span>Chain native</span></div>
           </div>
         </div>
@@ -84,11 +84,12 @@ export function HooditLanding() {
             </div>
             <div className="stage-item stage-qr" role="button" tabIndex={0} aria-label={qrFront ? "Bring the bot back to the front" : "Show the QR code"} onClick={toggleStage} onKeyDown={stageKey}>
               <div className="qr-sticker">
-                <div className="qr-code" role="img" aria-label="Hoodit Telegram invite QR code placeholder">
+                <div className="qr-code is-soon" role="img" aria-label="Hoodit Telegram bot, coming soon">
                   {qrPattern.join("").split("").map((cell, index) => <i key={index} className={cell === "1" ? "filled" : ""} />)}
                   <span><Image src="/hoodit-logo.jpg" alt="" width={512} height={512} /></span>
+                  <b className="qr-soon">COMING SOON</b>
                 </div>
-                <div className="qr-caption"><span>SCAN ME</span><b>TELEGRAM ↗</b></div>
+                <div className="qr-caption"><span>SOON ON</span><b>TELEGRAM</b></div>
               </div>
             </div>
           </div>
@@ -117,7 +118,7 @@ export function HooditLanding() {
       </div>
 
       <div className="tape" aria-hidden="true">
-        <div>TEXT TO TRADE <span>✦</span> COPY THE BEST <span>✦</span> READ THE CHAIN <span>✦</span> CONFIRM EVERY MOVE <span>✦</span> TEXT TO TRADE <span>✦</span> COPY THE BEST <span>✦</span></div>
+        <div>TEXT TO TRADE <span>✦</span> EXPLORE MARKETS <span>✦</span> READ YOUR WALLET <span>✦</span> REVIEW EXECUTION <span>✦</span> TEXT TO TRADE <span>✦</span> EXPLORE MARKETS <span>✦</span></div>
       </div>
 
       <section className="thesis section-shell" id="edge">
@@ -129,22 +130,22 @@ export function HooditLanding() {
         </div>
         <ChartScene className="thesis-scene" />
         <div className="desk-readout plate">
-          <div className="desk-status"><span><i /> LIVE MARKET CONTEXT</span><b>09:41:12 EST</b></div>
+          <div className="desk-status"><span><i /> ILLUSTRATIVE MARKET PREVIEW</span><b>EXAMPLE DATA</b></div>
           <div className="desk-intent">
             <small>YOUR INTENT</small>
-            <p>“Find the cleanest NVDA entry today. Risk no more than 2%.”</p>
+            <p>“Show active pools with strong liquidity, then explain the tradeoffs.”</p>
             <span>VOICE / TEXT / TELEGRAM</span>
           </div>
           <div className="desk-resolve">
-            <div><small>01 / READ</small><strong>Market + chain</strong><span>Price, flow and wallet behavior aligned.</span></div>
-            <div><small>02 / REASON</small><strong>Risk before entry</strong><span>Position sized against your hard limit.</span></div>
+            <div><small>01 / READ</small><strong>Market + chain</strong><span>Public pool activity and wallet balances in context.</span></div>
+            <div><small>02 / REASON</small><strong>Inspect the route</strong><span>Liquidity, activity, and quote limits made clear.</span></div>
             <div><small>03 / BUILD</small><strong>One reviewable tx</strong><span>Nothing moves until you confirm.</span></div>
           </div>
           <div className="desk-ticker" aria-hidden="true">
             <span>NVDA <b>+2.84%</b></span><i />
-            <span>SMART FLOW <b>+$2.4M</b></span><i />
-            <span>RISK CAP <b>2.00%</b></span><i />
-            <span>SIMULATION <b>PASSED</b></span>
+            <span>LIQUIDITY <b>$2.4M</b></span><i />
+            <span>24H VOLUME <b>$840K</b></span><i />
+            <span>EXECUTION <b>REVIEW REQUIRED</b></span>
           </div>
         </div>
       </section>
@@ -159,14 +160,14 @@ export function HooditLanding() {
           <article className="feature-card feature-salmon">
             <span className="feature-index">01</span>
             <div className="mini-stack"><i /><i /><i /></div>
-            <h3>Copy trading,<br />minus the blind faith.</h3>
-            <p>Follow wallets or traders. Hoodit explains the setup before it mirrors the move.</p>
+            <h3>Discover markets,<br />with context.</h3>
+            <p>Find active or newly indexed pools and inspect liquidity, volume, and recent trades.</p>
           </article>
           <article className="feature-card">
             <span className="feature-index">02</span>
             <div className="mini-chart"><i /><i /><i /><i /><i /></div>
-            <h3>On-chain insight<br />without the noise.</h3>
-            <p>Ask what capital is doing, what changed, and where the signal is coming from.</p>
+            <h3>Wallet balances<br />without the noise.</h3>
+            <p>Read current token balances and request bounded quote-based estimates when you need them.</p>
           </article>
           <article className="feature-card">
             <span className="feature-index">03</span>
@@ -176,9 +177,9 @@ export function HooditLanding() {
           </article>
           <article className="feature-card feature-green">
             <span className="feature-index">04</span>
-            <div className="model-badge">5.6</div>
-            <h3>A serious model<br />behind the chat.</h3>
-            <p>Powered by GPT-5.6 for reasoning across signals, constraints, and execution details.</p>
+            <div className="model-badge">AI</div>
+            <h3>An agent runtime<br />behind the chat.</h3>
+            <p>Powered by Aomi for reasoning across public market data, wallet reads, and execution details.</p>
           </article>
         </div>
       </section>
@@ -186,7 +187,7 @@ export function HooditLanding() {
       <section className="flow section-shell" id="how">
         <div className="flow-header">
           <p className="overline">ZERO COMMANDS TO MEMORIZE</p>
-          <h2>In before the<br />group chat notices.</h2>
+          <h2>From question to<br />reviewable trade.</h2>
         </div>
         <div className="flow-steps">
           <article>
@@ -201,8 +202,8 @@ export function HooditLanding() {
           </article>
           <article>
             <b className="flow-number">3</b>
-            <div className="flow-copy"><h3>Talk</h3><p>Describe the trade. Review the transaction. Confirm when it looks right.</p><small className="flow-note">NO COMMAND SYNTAX</small></div>
-            <div className="flow-visual talk-visual"><span className="talk-command">“Buy the breakout. Cap loss at $10.”</span><i className="talk-arrow">→</i><b className="talk-review">REVIEW TX ↗</b></div>
+            <div className="flow-copy"><h3>Talk</h3><p>Research a token or describe a trade. Review the transaction. Confirm when it looks right.</p><small className="flow-note">NO COMMAND SYNTAX</small></div>
+            <div className="flow-visual talk-visual"><span className="talk-command">“Research this pool, then buy $25.”</span><i className="talk-arrow">→</i><b className="talk-review">REVIEW TX ↗</b></div>
           </article>
         </div>
       </section>

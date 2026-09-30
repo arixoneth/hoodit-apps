@@ -1,0 +1,796 @@
+{
+  "synthetic": true,
+  "observed_at": "2026-09-20T12:00:00Z",
+  "description": "Controlled tool evidence; fictional contracts, not live investment candidates. Discovery is a fixed bounded candidate universe, not a provider/filter implementation test.",
+  "responses": [
+    {
+      "tool": "hoodit_search_tokens",
+      "match": {
+        "query": "GRIT"
+      },
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "query": "GRIT",
+          "tokens": [
+            {
+              "token": {
+                "id": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+                "kind": "erc20",
+                "symbol": "GRIT",
+                "name": "GRIT",
+                "decimals": 18,
+                "image_url": null
+              },
+              "match": "symbol",
+              "reference_pool": {
+                "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+                "dex_id": "uniswap-v3-robinhood",
+                "dex_name": "Uniswap V3 (Robinhood)"
+              },
+              "reference_price_usd": "0.014",
+              "reference_pool_liquidity_usd": "420000"
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "returned": 1,
+            "next_page": null
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-20T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-20T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_get_token",
+      "match": {
+        "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef"
+      },
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "token": {
+            "id": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+            "kind": "erc20",
+            "symbol": "GRIT",
+            "name": "GRIT",
+            "decimals": 18,
+            "image_url": null
+          },
+          "price_usd": "0.014",
+          "market_cap_usd": "1400000",
+          "fdv_usd": "2800000",
+          "volume_24h_usd": "130000",
+          "selected_pool": {
+            "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+            "dex_id": "uniswap-v3-robinhood",
+            "dex_name": "Uniswap V3 (Robinhood)",
+            "name": "GRIT / USDG",
+            "base_token": {
+              "id": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+              "kind": "erc20",
+              "symbol": "GRIT",
+              "name": "GRIT",
+              "decimals": 18,
+              "image_url": null
+            },
+            "quote_token": {
+              "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "kind": "erc20",
+              "symbol": "USDG",
+              "name": "Global Dollar",
+              "decimals": 6,
+              "image_url": null
+            },
+            "base_price_usd": "0.014",
+            "quote_price_usd": "1",
+            "liquidity_usd": "420000",
+            "created_at": "2026-08-20T12:00:00Z",
+            "windows": {
+              "m5": {
+                "base_price_change_pct": "8",
+                "volume_usd": "11000",
+                "buys": 19,
+                "sells": 17,
+                "buyers": 11,
+                "sellers": 10
+              },
+              "m15": {
+                "base_price_change_pct": "8",
+                "volume_usd": "11000",
+                "buys": 19,
+                "sells": 17,
+                "buyers": 11,
+                "sellers": 10
+              },
+              "m30": {
+                "base_price_change_pct": "8",
+                "volume_usd": "11000",
+                "buys": 19,
+                "sells": 17,
+                "buyers": 11,
+                "sellers": 10
+              },
+              "h1": {
+                "base_price_change_pct": "8",
+                "volume_usd": "11000",
+                "buys": 19,
+                "sells": 17,
+                "buyers": 11,
+                "sellers": 10
+              },
+              "h6": {
+                "base_price_change_pct": "8",
+                "volume_usd": "11000",
+                "buys": 19,
+                "sells": 17,
+                "buyers": 11,
+                "sellers": 10
+              },
+              "h24": {
+                "base_price_change_pct": "8",
+                "volume_usd": "130000",
+                "buys": 190,
+                "sells": 170,
+                "buyers": 110,
+                "sellers": 100
+              }
+            }
+          },
+          "selected_token_price_usd": "0.014",
+          "other_pools": [],
+          "metadata": null,
+          "security": {
+            "status": "available",
+            "gt": {
+              "score": "82",
+              "verified": true,
+              "components": {},
+              "scope": "token_metadata"
+            },
+            "honeypot": {
+              "assessment": "conflicting",
+              "geckoterminal": false,
+              "goplus": true
+            },
+            "taxes": {
+              "buy_pct": null,
+              "sell_pct": null,
+              "source": "goplus"
+            },
+            "contract": {
+              "open_source": true,
+              "proxy": false,
+              "controls": {
+                "mintable": {
+                  "value": false,
+                  "source": "goplus"
+                },
+                "pausable": {
+                  "value": false,
+                  "source": "goplus"
+                },
+                "blacklist": {
+                  "value": false,
+                  "source": "goplus"
+                },
+                "modifiable_tax": {
+                  "value": false,
+                  "source": "goplus"
+                },
+                "hidden_owner": {
+                  "value": false,
+                  "source": "goplus"
+                }
+              }
+            }
+          },
+          "ownership": {
+            "status": "available",
+            "holder_count": {
+              "geckoterminal": 2800,
+              "goplus": 2750
+            },
+            "top10_concentration_pct": {
+              "geckoterminal": "24",
+              "goplus": "25"
+            },
+            "creator": {
+              "address": null,
+              "percentage": "1"
+            },
+            "owner": {
+              "address": null,
+              "percentage": "0"
+            },
+            "top_holders": [],
+            "holder_data_updated_at": "2026-09-20T12:00:00Z"
+          },
+          "liquidity_security": {
+            "status": "unknown",
+            "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+            "lock_status": null
+          },
+          "coverage": {
+            "security": {
+              "requested_level": "full",
+              "sources": [
+                "geckoterminal",
+                "goplus"
+              ],
+              "missing": [
+                "taxes",
+                "ownership_controls"
+              ]
+            },
+            "prices_executable": false
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-20T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-20T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_get_token_pools",
+      "match": {
+        "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef"
+      },
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+          "dex_ids": [],
+          "sort": "liquidity",
+          "direction": "desc",
+          "pools": [
+            {
+              "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+              "dex_id": "uniswap-v3-robinhood",
+              "dex_name": "Uniswap V3 (Robinhood)",
+              "name": "GRIT / USDG",
+              "base_token": {
+                "id": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+                "kind": "erc20",
+                "symbol": "GRIT",
+                "name": "GRIT",
+                "decimals": 18,
+                "image_url": null
+              },
+              "quote_token": {
+                "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+                "kind": "erc20",
+                "symbol": "USDG",
+                "name": "Global Dollar",
+                "decimals": 6,
+                "image_url": null
+              },
+              "base_price_usd": "0.014",
+              "quote_price_usd": "1",
+              "liquidity_usd": "420000",
+              "created_at": "2026-08-20T12:00:00Z",
+              "windows": {
+                "m5": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "m15": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "m30": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "h1": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "h6": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "h24": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "130000",
+                  "buys": 190,
+                  "sells": 170,
+                  "buyers": 110,
+                  "sellers": 100
+                }
+              }
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "returned": 1,
+            "next_page": null
+          },
+          "coverage": {
+            "scope": "provider_page",
+            "ranked_within_scanned_candidates": true,
+            "executable_route": false
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-20T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-20T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_get_candles",
+      "match": {
+        "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef"
+      },
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+          "pool": {
+            "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+            "dex_id": "uniswap-v3-robinhood",
+            "dex_name": "Uniswap V3 (Robinhood)"
+          },
+          "interval": "1h",
+          "before": 1789905600,
+          "currency": "USD",
+          "candles": [
+            {
+              "timestamp": 1789876800,
+              "open": "0.01",
+              "high": "0.0102",
+              "low": "0.0098",
+              "close": "0.01",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789880400,
+              "open": "0.01",
+              "high": "0.011219999999999999",
+              "low": "0.0098",
+              "close": "0.011",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789884000,
+              "open": "0.011",
+              "high": "0.011219999999999999",
+              "low": "0.01029",
+              "close": "0.0105",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789887600,
+              "open": "0.0105",
+              "high": "0.012240000000000001",
+              "low": "0.01029",
+              "close": "0.012",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789891200,
+              "open": "0.012",
+              "high": "0.012240000000000001",
+              "low": "0.011269999999999999",
+              "close": "0.0115",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789894800,
+              "open": "0.0115",
+              "high": "0.01326",
+              "low": "0.011269999999999999",
+              "close": "0.013",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789898400,
+              "open": "0.013",
+              "high": "0.01326",
+              "low": "0.01225",
+              "close": "0.0125",
+              "volume_usd": "12000",
+              "closed": true
+            },
+            {
+              "timestamp": 1789902000,
+              "open": "0.0125",
+              "high": "0.014280000000000001",
+              "low": "0.01225",
+              "close": "0.014",
+              "volume_usd": "12000",
+              "closed": true
+            }
+          ],
+          "summary": {
+            "first_timestamp": 1789876800,
+            "last_timestamp": 1789902000,
+            "open": "0.01",
+            "high": "0.014280000000000001",
+            "low": "0.0098",
+            "close": "0.014",
+            "volume_usd": "96000.0",
+            "change_pct": "40.0"
+          },
+          "coverage": {
+            "scope": "single_pool",
+            "requested_limit": 8,
+            "returned": 8,
+            "has_gaps": false,
+            "includes_open_candle": false,
+            "next_before": null
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-20T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-20T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_get_trades",
+      "match": {
+        "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef"
+      },
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "token": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+          "pool": {
+            "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+            "dex_id": "uniswap-v3-robinhood",
+            "dex_name": "Uniswap V3 (Robinhood)"
+          },
+          "trades": [
+            {
+              "id": "fixture:0",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905600,
+              "side": "buy",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:1",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905540,
+              "side": "sell",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:2",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905480,
+              "side": "buy",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:3",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905420,
+              "side": "sell",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:4",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905360,
+              "side": "buy",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:5",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905300,
+              "side": "sell",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:6",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905240,
+              "side": "buy",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            },
+            {
+              "id": "fixture:7",
+              "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "timestamp": 1789905180,
+              "side": "sell",
+              "token_amount": "100",
+              "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+              "counter_amount": "1",
+              "price_usd": "0.014",
+              "volume_usd": "150"
+            }
+          ],
+          "coverage": {
+            "scope": "single_pool",
+            "lookback_seconds": 86400,
+            "provider_trade_cap": 300,
+            "returned": 8,
+            "complete_history": false
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-20T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-20T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_discover_pools",
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "feed": "trending",
+          "source_feed": "trending",
+          "duration": "1h",
+          "min_liquidity_usd": "0",
+          "min_volume_24h_usd": "0",
+          "pools": [
+            {
+              "pool_id": "0xab519fc5ef1a0d98a3fdd8d1b1a6095be8e90a052a0ccafb325fc674be0f0cf5",
+              "dex_id": "uniswap-v3-robinhood",
+              "dex_name": "Uniswap V3 (Robinhood)",
+              "name": "GRIT / USDG",
+              "base_token": {
+                "id": "0x6fcb1cf1b113a341db0fa49dc95fcb841140e6ef",
+                "kind": "erc20",
+                "symbol": "GRIT",
+                "name": "GRIT",
+                "decimals": 18,
+                "image_url": null
+              },
+              "quote_token": {
+                "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+                "kind": "erc20",
+                "symbol": "USDG",
+                "name": "Global Dollar",
+                "decimals": 6,
+                "image_url": null
+              },
+              "base_price_usd": "0.014",
+              "quote_price_usd": "1",
+              "liquidity_usd": "420000",
+              "created_at": "2026-08-20T12:00:00Z",
+              "windows": {
+                "m5": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "m15": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "m30": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "h1": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "h6": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "11000",
+                  "buys": 19,
+                  "sells": 17,
+                  "buyers": 11,
+                  "sellers": 10
+                },
+                "h24": {
+                  "base_price_change_pct": "8",
+                  "volume_usd": "130000",
+                  "buys": 190,
+                  "sells": 170,
+                  "buyers": 110,
+                  "sellers": 100
+                }
+              }
+            }
+          ],
+          "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "returned": 1,
+            "next_page": null
+          },
+          "coverage": {
+            "scanned": 1,
+            "security_enriched": 0,
+            "ranked_within_scanned_candidates": true
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-16T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-16T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_get_market_options",
+      "output": {
+        "schema_version": "1.3.0",
+        "status": "ok",
+        "data": {
+          "network": {
+            "id": "robinhood",
+            "chain_id": 4663
+          },
+          "dexes": [],
+          "discovery": {
+            "mode": "free_bounded_scan",
+            "paid_megafilter": {
+              "configured": false,
+              "validated": false
+            }
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-09-18T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/research-snapshot",
+              "fetched_at": "2026-09-18T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    }
+  ]
+}

@@ -3,7 +3,7 @@ import { HooditApp } from "./hoodit-app";
 
 export const metadata: Metadata = {
   title: "Hoodit — App",
-  description: "Talk to Hoodit and trade stocks on Robinhood Chain from the web.",
+  description: "Research tokens, read your wallet, and trade on Robinhood Chain with Hoodit.",
 };
 
 export default function AppPage() {

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 170" role="img" aria-label="A pile of bills">
+<g transform="translate(70 118) rotate(-14)" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-46" y="-26" width="92" height="52" rx="3" fill="#8ed1aa" stroke="#15161c" stroke-width="4" />
+    <rect x="-38" y="-18" width="76" height="36" rx="2" fill="none" stroke="#2f8b57" stroke-width="2" />
+    <path d="M-30 -8 C-22 -14 -14 -2 -6 -8 S10 -14 18 -8 M-30 2 C-20 -4 -10 8 0 2 S16 -4 26 2 M-30 12 C-22 6 -12 18 -2 12 S12 6 22 12" stroke="#2f8b57" stroke-width="2.5" fill="none" />
+    <circle cx="0" cy="0" r="9" fill="#8ed1aa" stroke="#2f8b57" stroke-width="2.5" />
+    <path d="M0 -6 L0 6 M-3 -3 Q0 -6 3 -3 Q0 0 -3 3 Q0 6 3 3" stroke="#2f8b57" stroke-width="2" fill="none" />
+  </g>
+      <g transform="translate(190 112) rotate(9)" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-46" y="-26" width="92" height="52" rx="3" fill="#8ed1aa" stroke="#15161c" stroke-width="4" />
+    <rect x="-38" y="-18" width="76" height="36" rx="2" fill="none" stroke="#2f8b57" stroke-width="2" />
+    <path d="M-30 -8 C-22 -14 -14 -2 -6 -8 S10 -14 18 -8 M-30 2 C-20 -4 -10 8 0 2 S16 -4 26 2 M-30 12 C-22 6 -12 18 -2 12 S12 6 22 12" stroke="#2f8b57" stroke-width="2.5" fill="none" />
+    <circle cx="0" cy="0" r="9" fill="#8ed1aa" stroke="#2f8b57" stroke-width="2.5" />
+    <path d="M0 -6 L0 6 M-3 -3 Q0 -6 3 -3 Q0 0 -3 3 Q0 6 3 3" stroke="#2f8b57" stroke-width="2" fill="none" />
+  </g>
+      <g transform="translate(126 82) rotate(-4)" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-46" y="-26" width="92" height="52" rx="3" fill="#8ed1aa" stroke="#15161c" stroke-width="4" />
+    <rect x="-38" y="-18" width="76" height="36" rx="2" fill="none" stroke="#2f8b57" stroke-width="2" />
+    <path d="M-30 -8 C-22 -14 -14 -2 -6 -8 S10 -14 18 -8 M-30 2 C-20 -4 -10 8 0 2 S16 -4 26 2 M-30 12 C-22 6 -12 18 -2 12 S12 6 22 12" stroke="#2f8b57" stroke-width="2.5" fill="none" />
+    <circle cx="0" cy="0" r="9" fill="#8ed1aa" stroke="#2f8b57" stroke-width="2.5" />
+    <path d="M0 -6 L0 6 M-3 -3 Q0 -6 3 -3 Q0 0 -3 3 Q0 6 3 3" stroke="#2f8b57" stroke-width="2" fill="none" />
+  </g>
+      <g transform="translate(116 52) rotate(6)" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="-46" y="-26" width="92" height="52" rx="3" fill="#8ed1aa" stroke="#15161c" stroke-width="4" />
+    <rect x="-38" y="-18" width="76" height="36" rx="2" fill="none" stroke="#2f8b57" stroke-width="2" />
+    <path d="M-30 -8 C-22 -14 -14 -2 -6 -8 S10 -14 18 -8 M-30 2 C-20 -4 -10 8 0 2 S16 -4 26 2 M-30 12 C-22 6 -12 18 -2 12 S12 6 22 12" stroke="#2f8b57" stroke-width="2.5" fill="none" />
+    <circle cx="0" cy="0" r="9" fill="#8ed1aa" stroke="#2f8b57" stroke-width="2.5" />
+    <path d="M0 -6 L0 6 M-3 -3 Q0 -6 3 -3 Q0 0 -3 3 Q0 6 3 3" stroke="#2f8b57" stroke-width="2" fill="none" />
+  </g>
+      <g transform="translate(222 46)" stroke-linejoin="round">
+        <circle r="22" fill="#e8a93c" stroke="#15161c" stroke-width="4" />
+        <path d="M0 -13 L0 13 M-7 -6 Q0 -12 7 -6 Q0 0 -7 6 Q0 12 7 6" stroke="#15161c" stroke-width="3.5" fill="none" stroke-linecap="round" />
+      </g>
+      <g transform="translate(30 42)" stroke-linejoin="round">
+        <circle r="15" fill="#e8a93c" stroke="#15161c" stroke-width="3.5" />
+        <path d="M0 -9 L0 9 M-5 -4 Q0 -8 5 -4 Q0 0 -5 4 Q0 8 5 4" stroke="#15161c" stroke-width="3" fill="none" stroke-linecap="round" />
+      </g>
+</svg>

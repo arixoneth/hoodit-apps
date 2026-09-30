@@ -24,7 +24,7 @@ export default function HooditWidget() {
       applicationId="2938613"
       apiUrl="https://chat.aomi.dev"
       auth={auth}
-      // Hoodit trades Stock Tokens on Robinhood Chain only, so the network
+      // Hoodit researches and trades tokens on Robinhood Chain only, so the network
       // selector and wallet connection are pinned to it.
       wallets={{
         evm: { preset: "popular", chains: [robinhood], appName: "Hoodit", appLogoUrl: "/hoodit-logo.jpg" },

@@ -1,46 +1,28 @@
 {
-  "user_story": "Verify Hoodit's disposable app skill injects its probe tool only after activation, then find Apple's canonical Robinhood Stock Token, inspect its live multiplier-adjusted market snapshot, and read the connected wallet's AAPL position and Stock Token portfolio without preparing a trade.",
-  "wallet_seed": {
-    "address": "0x2d4d2A025b10C09BDbd794B4FCe4F7ea8C7d7bB4",
-    "chain_id": 4663,
-    "is_connected": true
-  },
+  "user_story": "A trader casually explores Robinhood Chain coins, checks a named token, and asks a short follow-up without supplying an internal research checklist.",
   "turns": [
     {
-      "prompt": "Run the disposable Hoodit skill-injection deployment probe and report its exact marker. Do not call any market or wallet tools.",
+      "prompt": "what can i ape today?",
       "expected_tools": {
-        "must_call": ["activate_skills", "hoodit_skill_injection_test"]
+        "must_call": [
+          "hoodit_discover_pools"
+        ]
       }
     },
     {
-      "prompt": "Find Apple in the Robinhood Stock Token catalog. Keep the answer short and include its ticker and canonical Robinhood Chain contract.",
-      "expected_tools": {
-        "must_call": ["hoodit_search_stock_tokens"]
-      }
+      "prompt": "PONS looking good?"
     },
     {
-      "prompt": "Now give me a concise live AAPL snapshot, including the underlying bid and ask, multiplier-adjusted token reference, halt status, and data time.",
-      "expected_tools": {
-        "must_call": ["hoodit_get_stock_snapshot"]
-      }
+      "prompt": "is the chart actually decent or just hype?"
     },
     {
-      "prompt": "Check AAPL position for connected wallet, including its current reference value. Do not prepare or execute a trade.",
-      "expected_tools": {
-        "must_call": ["activate_skills", "get_robinhood_stock_position"]
-      }
+      "prompt": "people actually selling this thing?"
     },
     {
-      "prompt": "Full portfolio check: show this wallet's Robinhood Stock Token positions and total reference value. Keep it short and do not prepare or execute a trade.",
-      "expected_tools": {
-        "must_call": ["get_robinhood_stock_portfolio"]
-      }
+      "prompt": "give me your take in two lines"
     }
   ],
   "final_assertion": {
-    "tool_responses": {
-      "any_returned_substring": "HOODIT_SKILL_INJECTION_OK"
-    },
     "user_state": {
       "pending_txs": {
         "max_count": 0
@@ -50,6 +32,6 @@
       }
     },
     "no_errors": true,
-    "max_turns": 10
+    "max_turns": 24
   }
 }
