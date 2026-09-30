@@ -43,7 +43,7 @@ can pass the rubric despite an incomplete chart investigation.
    runner. It now uses natural prompts and allows follow-ups to reuse earlier
    evidence instead of forcing a new tool call per turn. Its state/error checks
    are a basic compatibility smoke, not answer-quality grading.
-2. **Research component:** `scripts/research_eval.py` loads the SDK 5.1.0 plugin
+2. **Research component:** `scripts/research_eval.py` loads the SDK 5.1.1 plugin
    ABI and runs an explicit model against either controlled tool evidence or the
    real compiled read tools. Skill activation is a local adapter enforcing the inspected host
    rules: `skill_ids`, one activation in the first pass of each request, and
@@ -87,7 +87,7 @@ is not infallible or statistically independent merely because its name differs.
 ## Run
 
 Prerequisites: Python, the dependency in `tests/research/requirements.txt`, a
-trusted compiled SDK 5.1.0 Hoodit plugin, and `OPENAI_API_KEY`. Optional
+trusted compiled SDK 5.1.1 Hoodit plugin, and `OPENAI_API_KEY`. Optional
 `OPENAI_BASE_URL`/`OPENAI_API_BASE` retain the configured provider. `--env-file`
 reads simple dotenv assignments; existing process environment takes precedence.
 Keys are not written to reports.

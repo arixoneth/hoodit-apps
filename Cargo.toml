@@ -3,4 +3,4 @@ resolver = "3"
 members = ["apps/hoodit"]
 
 [workspace.dependencies]
-aomi-sdk = "=5.1.0"
+aomi-sdk = "=5.1.1"

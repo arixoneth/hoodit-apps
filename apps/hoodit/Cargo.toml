@@ -7,7 +7,7 @@ edition = "2024"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-aomi-sdk = "=5.1.0"
+aomi-sdk = "=5.1.1"
 base64 = "0.22"
 bigdecimal = "0.4"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }

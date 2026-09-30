@@ -103,7 +103,7 @@ class Model:
 
 
 class Plugin:
-    """The SDK 5.1.0 synchronous read-tool ABI; no transaction tools exposed."""
+    """The SDK 5.1.1 synchronous read-tool ABI; no transaction tools exposed."""
     def __init__(self, path):
         self.path = Path(path).resolve()
         self.lib = ctypes.CDLL(str(self.path))
@@ -117,8 +117,8 @@ class Plugin:
         ]:
             function = getattr(self.lib, name)
             function.argtypes, function.restype = args, ret
-        if self.lib.aomi_sdk_version() != b"5.1.0":
-            raise ValueError("this adapter requires SDK 5.1.0")
+        if self.lib.aomi_sdk_version() != b"5.1.1":
+            raise ValueError("this adapter requires SDK 5.1.1")
         self.instance = self.lib.aomi_create()
         if not self.instance:
             raise RuntimeError("plugin construction failed")

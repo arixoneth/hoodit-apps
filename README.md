@@ -47,12 +47,12 @@ origin, credential and error boundaries. Wallet signing requires separate tests.
 
 ## Aomi application
 
-The workspace pins `aomi-sdk = "=5.1.0"`, matching the Aomi backend runtime. GeckoTerminal market data, GoPlus security evidence, CoinGecko native-asset pricing, and LI.FI read-only sample quotes use public keyless APIs. Wallet reads use a free Blockscout key configured only in Hoodit's Builder Environment. Provider credentials are delivered by the host and never exposed as tool arguments, requested from end users, or handled by the frontend relay.
+The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. GeckoTerminal market data, GoPlus security evidence, CoinGecko native-asset pricing, and LI.FI read-only sample quotes use public keyless APIs. Wallet reads use a free Blockscout key configured only in Hoodit's Builder Environment. Provider credentials are delivered by the host and never exposed as tool arguments, requested from end users, or handled by the frontend relay.
 
 ```bash
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-aomi-build sdk check --path . --required-version 5.1.0
+aomi-build sdk check --path . --required-version 5.1.1
 ```
 
 The natural-language application compatibility scenario lives at `apps/hoodit/test.json`.
