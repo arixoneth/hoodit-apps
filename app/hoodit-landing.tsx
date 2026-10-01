@@ -139,7 +139,7 @@ export function HooditLanding() {
           <div className="desk-resolve">
             <div><small>01 / READ</small><strong>Market + chain</strong><span>Public pool activity and wallet balances in context.</span></div>
             <div><small>02 / REASON</small><strong>Inspect the route</strong><span>Liquidity, activity, and quote limits made clear.</span></div>
-            <div><small>03 / BUILD</small><strong>One reviewable tx</strong><span>Nothing moves until you confirm.</span></div>
+            <div><small>03 / BUILD</small><strong>A reviewable trade</strong><span>Nothing moves until you confirm.</span></div>
           </div>
           <div className="desk-ticker" aria-hidden="true">
             <span>NVDA <b>+2.84%</b></span><i />

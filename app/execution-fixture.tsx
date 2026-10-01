@@ -7,52 +7,51 @@ type Step =
   | { kind: "tool"; title: string; chips: string[] }
   | { kind: "note"; text: string };
 
-const prompt =
-  "Buy $500 of NVDA if it breaks today's high. Keep downside under 3%.";
+const prompt = "sell half my PONS into ETH. can i get out clean?";
 
 const steps: Step[] = [
   {
     kind: "tool",
-    title: "Activate trading skills",
-    chips: ["market_data", "risk_guard", "robinhood_chain"],
+    title: "Activate skills",
+    chips: ["hoodit/markets", "lifi_swap"],
   },
   {
     kind: "tool",
-    title: "Check buying power",
-    chips: ["$1,240 USDC", "account ready", "market open"],
+    title: "Read wallet holdings",
+    chips: ["412,880 PONS", "0.31 ETH", "Robinhood Chain"],
+  },
+  {
+    kind: "tool",
+    title: "Check token and launch stage",
+    chips: ["graduated", "no honeypot flags", "taxes unknown"],
   },
   {
     kind: "note",
-    text: "Buying power covers the order. Reading the live high and on-chain flow before setting the trigger.",
+    text: "Half is 206,440 PONS, sized exactly. Quoting that exact amount before staging anything.",
   },
   {
     kind: "tool",
-    title: "Read NVDA breakout level",
-    chips: ["day high $179.32", "trigger $179.33"],
-  },
-  {
-    kind: "tool",
-    title: "Analyze on-chain signal",
-    chips: ["buy pressure +18%", "slippage 0.2%"],
+    title: "Check exit at size",
+    chips: ["route found", "loss 1.8%", "gas $0.02"],
   },
   {
     kind: "note",
-    text: "Momentum and liquidity checks pass. The 3% stop keeps the trade inside your risk limit.",
+    text: "The exit is clean at this size. Preparing the swap for your review.",
   },
   {
     kind: "tool",
-    title: "Stage conditional stock trade",
-    chips: ["$500 NVDA", "breakout entry", "stop −3%"],
+    title: "Quote and stage swap",
+    chips: ["206,440 PONS → ETH", "min out 0.0412 ETH"],
   },
   {
     kind: "tool",
     title: "Simulate transaction",
-    chips: ["policy passed", "est. 2.79 shares"],
+    chips: ["approval + swap", "simulation passed"],
   },
   {
     kind: "tool",
-    title: "Arm conditional order",
-    chips: ["0xa73c…91e2", "watching"],
+    title: "Send to wallet",
+    chips: ["awaiting signature"],
   },
 ];
 
@@ -225,8 +224,8 @@ export function ExecutionFixture() {
 
         {complete && (
           <div className="fixture-answer">
-            <p>The NVDA order is armed. Hoodit will submit the trade only if price clears $179.33, with the 3% stop attached.</p>
-            <div><span>order 0xa73c…91e2</span><b>watching</b></div>
+            <p>Sold 206,440 PONS for 0.0415 ETH. The receipt is confirmed on Robinhood Chain.</p>
+            <div><span>tx 0xa73c…91e2</span><b>confirmed</b></div>
           </div>
         )}
       </div>
