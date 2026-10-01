@@ -2,6 +2,7 @@
 
 mod candles;
 mod discovery;
+mod exit;
 mod normalization;
 mod options;
 mod pools;
@@ -12,6 +13,7 @@ mod trades;
 
 pub use candles::{CandlesArgs, GetCandles};
 pub use discovery::{DiscoverArgs, DiscoverPools};
+pub use exit::{CheckExit, ExitArgs};
 pub use options::{GetMarketOptions, MarketOptionsArgs};
 pub use pools::{GetTokenPools, TokenPoolsArgs};
 pub use search::{SearchArgs, SearchTokens};

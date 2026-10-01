@@ -1,6 +1,14 @@
-# Hoodit v1.3.0 tool contracts
+# Hoodit v1.4.0 tool contracts
 
-This bundle is the canonical public contract for Hoodit’s two skill-owned, nine read-only tools on Robinhood Chain (`4663`). Market reads use GeckoTerminal, security enrichment uses GeckoTerminal and GoPlus, and native ETH/USD mapping uses CoinGecko. Wallet inventory and exact balances use Blockscout’s free authenticated API. Optional quote samples use read-only LI.FI quotes; actual swaps remain in the inherited host execution flow.
+This bundle is the canonical public contract for Hoodit’s eight read-only tools on Robinhood Chain (`4663`), all owned by the `hoodit/markets` skill. Market reads use GeckoTerminal (or CoinGecko's keyed onchain API when an operator key is configured), security enrichment uses GeckoTerminal and GoPlus, and exit checks use read-only LI.FI quotes. Wallet balances come from the Aomi host's `get_erc20_holdings`; actual swaps remain in the inherited host execution flow.
+
+## Amendments in 1.4.0
+
+- `hoodit_get_portfolio`, `hoodit_get_holding`, and the Blockscout provider are removed; the host's holdings tool covers Robinhood Chain wallets.
+- `hoodit_get_token` adds `lifecycle`: launchpad curve progress, graduation time, and destination pool. `not_reported` is not 0% bonded. Graduated tokens default to their destination pool.
+- Discovery pools carry the same lifecycle when it could be read.
+- Trades keep `sender` and `block_number`; the summary counts distinct senders and ranks the top three buyers and sellers in the returned sample.
+- `hoodit_check_exit` quotes an exact-size sell or a buy-then-sell round trip. It is never executable and never evaluates balances.
 
 ## Amendments from 1.0.0
 

@@ -1,11 +1,11 @@
 use super::{
-    normalization::{invalid_argument, response_rows, validate_page},
+    normalization::{invalid_argument, lifecycle, response_rows, validate_page},
     security::normalize_security,
 };
 use crate::{
     app::{HooditApp, ReadContext},
     model,
-    providers::{Gecko, GoPlus, included_map, pool},
+    providers::{Gecko, GoPlus, included_map, pool, token_from_resource},
     tools::provider_error,
 };
 use aomi_sdk::schemars::JsonSchema;
@@ -271,7 +271,7 @@ impl DynAomiTool for DiscoverPools {
     const NAME: &'static str = "hoodit_discover_pools";
     const DESCRIPTION: &'static str = "Browse or strictly screen GeckoTerminal-indexed Robinhood Chain pools with bounded cross-page scanning, optional token security and ownership conditions, explicit unknown handling, and coverage accounting. Rankings are best among scanned candidates, not market-wide or executable routes.";
 
-    fn run(app: &HooditApp, args: DiscoverArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: DiscoverArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let feed = args.feed.as_deref().unwrap_or("trending");
         if !["trending", "new", "top_volume", "top_activity", "screened"].contains(&feed) {
             return Ok(model::error("INVALID_ARGUMENT", "unsupported feed", false));
@@ -404,7 +404,7 @@ impl DynAomiTool for DiscoverPools {
         let pagination_start_offset = offset;
 
         let runtime = app.runtime()?;
-        let gecko = Gecko::new(&runtime);
+        let gecko = Gecko::new(&runtime, &ctx);
         let goplus = GoPlus::new(&runtime);
         let mut read = ReadContext::markets(args.refresh.unwrap_or(false));
         let mut candidates = vec![];
@@ -540,6 +540,42 @@ impl DynAomiTool for DiscoverPools {
             candidates.reverse();
         }
         let returned = candidates.len();
+        let mut lifecycle_warning = None;
+        let lifecycle_tokens = candidates
+            .iter()
+            .filter_map(|candidate| model::string(candidate, &["base_token", "id"]))
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .take(30)
+            .collect::<Vec<_>>();
+        if !lifecycle_tokens.is_empty() {
+            match gecko.tokens(&lifecycle_tokens, &mut read) {
+                Ok(response) => {
+                    let by_token = response_rows(&response)
+                        .iter()
+                        .filter_map(|resource| {
+                            model::string(&token_from_resource(resource), &["id"])
+                                .map(|id| (id, lifecycle(resource)))
+                        })
+                        .collect::<std::collections::HashMap<_, _>>();
+                    for candidate in &mut candidates {
+                        let token = model::string(candidate, &["base_token", "id"]);
+                        candidate["lifecycle"] = token
+                            .and_then(|token| by_token.get(&token).cloned())
+                            .unwrap_or(Value::Null);
+                    }
+                }
+                Err(_) => {
+                    lifecycle_warning = Some(model::warning(
+                        "METADATA_UNAVAILABLE",
+                        "Launchpad lifecycle could not be read for these results; curve and graduation state is unknown",
+                    ));
+                    for candidate in &mut candidates {
+                        candidate["lifecycle"] = Value::Null;
+                    }
+                }
+            }
+        }
         let next_cursor = continuation.map(|(page, offset)| {
             encode_cursor(ScreenCursor {
                 v: 2,
@@ -551,6 +587,7 @@ impl DynAomiTool for DiscoverPools {
         });
         let next_page = continuation.and_then(|(page, offset)| (offset == 0).then_some(page));
         let mut warnings = read.warnings;
+        warnings.extend(lifecycle_warning);
         if continuation.is_some() {
             warnings.push(model::warning(
                 "SCAN_BOUND_REACHED",

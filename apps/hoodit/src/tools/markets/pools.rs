@@ -47,7 +47,7 @@ impl DynAomiTool for GetTokenPools {
     const NAME: &'static str = "hoodit_get_token_pools";
     const DESCRIPTION: &'static str = "Compare GeckoTerminal-indexed pools containing one exact Robinhood Chain token, optionally narrowed to canonical DEX IDs. Rankings are observational within the scanned page and do not select an executable swap route.";
 
-    fn run(app: &HooditApp, args: TokenPoolsArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: TokenPoolsArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = invalid_argument!(model::address(&args.token));
         let page = invalid_argument!(validate_page(args.page));
         let sort = args.sort.as_deref().unwrap_or("liquidity");
@@ -81,7 +81,7 @@ impl DynAomiTool for GetTokenPools {
 
         let runtime = app.runtime()?;
         let mut read = ReadContext::markets(args.refresh.unwrap_or(false));
-        let response = match Gecko::new(&runtime).token_pools_page(&token, page, &mut read) {
+        let response = match Gecko::new(&runtime, &ctx).token_pools_page(&token, page, &mut read) {
             Ok(response) => response,
             Err(error) => return Ok(provider_error(error)),
         };

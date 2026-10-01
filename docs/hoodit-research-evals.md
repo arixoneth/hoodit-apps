@@ -53,7 +53,7 @@ can pass the rubric despite an incomplete chart investigation.
 
 The component runner does **not** reproduce the full host prompt, skill
 chain/tool admission policy, routing/delegation, frontend, wallet lifecycle, host
-session authentication, or deployment. It exposes only seven market read tools.
+session authentication, or deployment. It exposes only the eight read tools of the market skill.
 Do not call its results full end-to-end proof. A compiled plugin's schemas and
 behavior may be older than the source instructions; every report records the
 binary version/hash and exact instruction snapshot to make that visible.

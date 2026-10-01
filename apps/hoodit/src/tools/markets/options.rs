@@ -27,10 +27,10 @@ impl DynAomiTool for GetMarketOptions {
     const NAME: &'static str = "hoodit_get_market_options";
     const DESCRIPTION: &'static str = "List current canonical Robinhood Chain DEX IDs plus Hoodit's available discovery filters, sorts, windows, and provider capability mode. Use before constructing a strict screen; it never requests credentials or performs a trade.";
 
-    fn run(app: &HooditApp, args: MarketOptionsArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: MarketOptionsArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let runtime = app.runtime()?;
         let mut read = ReadContext::markets(args.refresh.unwrap_or(false));
-        let response = match Gecko::new(&runtime).dexes(&mut read) {
+        let response = match Gecko::new(&runtime, &ctx).dexes(&mut read) {
             Ok(response) => response,
             Err(error) => return Ok(provider_error(error)),
         };

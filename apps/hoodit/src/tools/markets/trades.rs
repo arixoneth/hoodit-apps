@@ -50,9 +50,9 @@ impl DynAomiTool for GetTrades {
     type App = HooditApp;
     type Args = TradesArgs;
     const NAME: &'static str = "hoodit_get_trades";
-    const DESCRIPTION: &'static str = "Read recent public trades for one exact token contract in one selected pool, with buy/sell side normalized to that token. Requires a 0x contract address; this is public pool activity, not the user's personal history.";
+    const DESCRIPTION: &'static str = "Read recent public trades for one exact token contract in one selected pool, with buy/sell side normalized to that token, each trade's sending wallet, and the largest buyers and sellers in the sample. Requires a 0x contract address; this is public pool activity, not the user's personal history.";
 
-    fn run(app: &HooditApp, args: TradesArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: TradesArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = invalid_argument!(model::address(&args.token));
         let limit = args.limit.unwrap_or(20);
         if !(1..=100).contains(&limit) {
@@ -77,7 +77,7 @@ impl DynAomiTool for GetTrades {
         let explicit_pool_id =
             invalid_argument!(args.pool_id.as_deref().map(normalize_pool_id).transpose());
         let runtime = app.runtime()?;
-        let gecko = Gecko::new(&runtime);
+        let gecko = Gecko::new(&runtime, &ctx);
         let mut read = ReadContext::markets(false);
         let (selected_pool, selected_pool_id) =
             match resolve_pool(&gecko, &token, explicit_pool_id.as_deref(), &mut read) {
@@ -133,8 +133,15 @@ impl DynAomiTool for GetTrades {
                     .to_plain_string()
             })
         };
+        let distinct_senders = trades
+            .iter()
+            .filter_map(|trade| model::string(trade, &["sender"]))
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+        let top_buyers = top_wallets(&trades, "buy");
+        let top_sellers = top_wallets(&trades, "sell");
         Ok(model::ok(
-            json!({"token":token,"pool":{"pool_id":selected_pool["pool_id"],"dex_id":selected_pool["dex_id"],"dex_name":selected_pool["dex_name"]},"side":args.side.as_deref().unwrap_or("both"),"trades":trades,"summary":{"scope":"returned_sample","buys":buys,"sells":sells,"volume_usd":observed_volume_usd,"unique_traders":null},"coverage":{"scope":"single_pool","lookback_seconds":86400,"provider_trade_cap":300,"matched_before_limit":matched_before_limit,"returned":returned,"complete_history":false}}),
+            json!({"token":token,"pool":{"pool_id":selected_pool["pool_id"],"dex_id":selected_pool["dex_id"],"dex_name":selected_pool["dex_name"]},"side":args.side.as_deref().unwrap_or("both"),"trades":trades,"summary":{"scope":"returned_sample","buys":buys,"sells":sells,"volume_usd":observed_volume_usd,"unique_traders":null,"distinct_senders":distinct_senders,"top_buyers":top_buyers,"top_sellers":top_sellers,"sender_scope":"transaction_sender_may_be_router_or_executor"},"coverage":{"scope":"single_pool","lookback_seconds":86400,"provider_trade_cap":300,"matched_before_limit":matched_before_limit,"returned":returned,"complete_history":false}}),
             read.sources,
             read.warnings,
         ))
@@ -168,7 +175,37 @@ fn normalize_trade(resource: Value, requested_token: &str) -> Value {
     let timestamp = model::string(&attributes, &["block_timestamp"])
         .and_then(|value| chrono::DateTime::parse_from_rfc3339(&value).ok())
         .map(|timestamp| timestamp.timestamp());
-    json!({"id":model::string(&resource,&["id"]),"tx_hash":model::string(&attributes,&["tx_hash"]),"timestamp":timestamp,"side":side,"token_amount":token_amount,"counter_token":if counter_token.is_empty(){None}else{Some(counter_token)},"counter_amount":counter_amount,"price_usd":price_usd,"volume_usd":model::string(&attributes,&["volume_in_usd"])})
+    let sender = model::string(&attributes, &["tx_from_address"])
+        .and_then(|sender| model::address(&sender).ok());
+    let block_number = model::get(&attributes, &["block_number"]).and_then(Value::as_u64);
+    json!({"id":model::string(&resource,&["id"]),"tx_hash":model::string(&attributes,&["tx_hash"]),"timestamp":timestamp,"block_number":block_number,"sender":sender,"side":side,"token_amount":token_amount,"counter_token":if counter_token.is_empty(){None}else{Some(counter_token)},"counter_amount":counter_amount,"price_usd":price_usd,"volume_usd":model::string(&attributes,&["volume_in_usd"])})
+}
+
+/// The three largest senders on one side of the returned sample, by USD
+/// volume. A sender is the transaction's from-address, not a verified trader.
+fn top_wallets(trades: &[Value], side: &str) -> Vec<Value> {
+    use bigdecimal::BigDecimal;
+    use std::collections::BTreeMap;
+    use std::str::FromStr;
+    let mut totals: BTreeMap<String, (usize, BigDecimal)> = BTreeMap::new();
+    for trade in trades.iter().filter(|trade| trade["side"] == side) {
+        let Some(sender) = model::string(trade, &["sender"]) else {
+            continue;
+        };
+        let volume = model::string(trade, &["volume_usd"])
+            .and_then(|value| BigDecimal::from_str(&value).ok())
+            .unwrap_or_default();
+        let entry = totals.entry(sender).or_default();
+        entry.0 += 1;
+        entry.1 += volume;
+    }
+    let mut ranked = totals.into_iter().collect::<Vec<_>>();
+    ranked.sort_by(|left, right| right.1.1.cmp(&left.1.1));
+    ranked
+        .into_iter()
+        .take(3)
+        .map(|(sender, (count, volume))| json!({"sender":sender,"trades":count,"volume_usd":volume.normalized().to_plain_string()}))
+        .collect()
 }
 
 #[cfg(test)]
@@ -191,5 +228,25 @@ mod tests {
         );
         assert_eq!(sell["side"], "sell");
         assert_eq!(sell["token_amount"], "3");
+    }
+
+    #[test]
+    fn top_wallets_rank_senders_by_side_volume() {
+        let trades = vec![
+            json!({"side":"sell","sender":"0x00000000000000000000000000000000000000aa","volume_usd":"10"}),
+            json!({"side":"sell","sender":"0x00000000000000000000000000000000000000aa","volume_usd":"5"}),
+            json!({"side":"sell","sender":"0x00000000000000000000000000000000000000bb","volume_usd":"12"}),
+            json!({"side":"buy","sender":"0x00000000000000000000000000000000000000cc","volume_usd":"99"}),
+            json!({"side":"sell","sender":null,"volume_usd":"500"}),
+        ];
+        let sellers = top_wallets(&trades, "sell");
+        assert_eq!(sellers.len(), 2);
+        assert_eq!(
+            sellers[0]["sender"],
+            "0x00000000000000000000000000000000000000aa"
+        );
+        assert_eq!(sellers[0]["trades"], 2);
+        assert_eq!(sellers[0]["volume_usd"], "15");
+        assert_eq!(top_wallets(&trades, "buy").len(), 1);
     }
 }

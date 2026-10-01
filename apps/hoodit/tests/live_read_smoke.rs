@@ -3,27 +3,33 @@ use hoodit::{app::HooditApp, tools::*};
 use serde_json::json;
 use std::collections::HashMap;
 
+/// Optional COINGECKO_API_KEY routes market reads through CoinGecko's keyed
+/// onchain API instead of the shared public GeckoTerminal allowance.
 fn ctx(name: &str, key: &str) -> DynToolCallCtx {
+    let secrets = if key.is_empty() {
+        HashMap::new()
+    } else {
+        HashMap::from([("COINGECKO_API_KEY".into(), key.into())])
+    };
     DynToolCallCtx {
         session_id: "hoodit-live-read-smoke".into(),
         tool_name: name.into(),
         call_id: format!("{name}-1"),
         state_attributes: Default::default(),
-        secrets: HashMap::from([("BLOCKSCOUT_API_KEY".into(), key.into())]),
+        secrets,
     }
 }
 
 #[test]
-#[ignore = "read-only live provider smoke; set HOODIT_BLOCKSCOUT_API_KEY"]
+#[ignore = "read-only live provider smoke; optionally set HOODIT_COINGECKO_API_KEY"]
 fn live_read_tools_emit_envelopes() {
-    let key = std::env::var("HOODIT_BLOCKSCOUT_API_KEY").unwrap_or_default();
+    let key = std::env::var("HOODIT_COINGECKO_API_KEY").unwrap_or_default();
     let app = HooditApp::default();
     let token = std::env::var("HOODIT_LIVE_TOKEN")
         .unwrap_or_else(|_| "0x39dbed3a2bd333467115de45665cc57f813c4571".into());
-    let pool = "0x4be9657ec9002e528f4f17a5c43edc525a07f888f7b180c2afbf75e096c4f38a";
-    let wallet = std::env::var("HOODIT_LIVE_WALLET")
-        .unwrap_or_else(|_| "0xb202bb725c85b90bd847d350ebc7f16ff8408ed8".into());
-    let selected = std::env::var("HOODIT_LIVE_TOOL").unwrap_or_else(|_| "portfolio".into());
+    // Omit to exercise automatic pool selection, including graduated tokens.
+    let pool = std::env::var("HOODIT_LIVE_POOL").ok();
+    let selected = std::env::var("HOODIT_LIVE_TOOL").unwrap_or_else(|_| "token".into());
     let case = match selected.as_str() {
         "search" => {
             let input = json!({"query":token});
@@ -129,53 +135,20 @@ fn live_read_tools_emit_envelopes() {
                 .unwrap(),
             )
         }
-        "holding" => {
-            let input =
-                json!({"wallet_address":wallet,"token":token,"include_quote":false,"refresh":true});
+        "exit" => {
+            let input = json!({"token":token,"mode":"round_trip","eth_amount":"0.001"});
             (
-                "hoodit_get_holding",
+                "hoodit_check_exit",
                 input.clone(),
-                GetHolding::run(
+                CheckExit::run(
                     &app,
                     serde_json::from_value(input).unwrap(),
-                    ctx("hoodit_get_holding", &key),
+                    ctx("hoodit_check_exit", &key),
                 )
                 .unwrap(),
             )
         }
-        "holding_quote" => {
-            let input = json!({"wallet_address":wallet,"token":token,"include_quote":true,"quote_balance_bps":10000,"refresh":true});
-            (
-                "hoodit_get_holding",
-                input.clone(),
-                GetHolding::run(
-                    &app,
-                    serde_json::from_value(input).unwrap(),
-                    ctx("hoodit_get_holding", &key),
-                )
-                .unwrap(),
-            )
-        }
-        _ => {
-            assert!(
-                !key.is_empty(),
-                "HOODIT_BLOCKSCOUT_API_KEY is required for wallet reads"
-            );
-            let mut input = json!({"wallet_address":wallet,"include_quotes":false,"refresh":true});
-            if let Ok(cursor) = std::env::var("HOODIT_LIVE_CURSOR") {
-                input["cursor"] = json!(cursor);
-            }
-            (
-                "hoodit_get_portfolio",
-                input.clone(),
-                GetPortfolio::run(
-                    &app,
-                    serde_json::from_value(input).unwrap(),
-                    ctx("hoodit_get_portfolio", &key),
-                )
-                .unwrap(),
-            )
-        }
+        other => panic!("unknown HOODIT_LIVE_TOOL {other}"),
     };
     let cases = vec![case];
     for (tool, _, output) in &cases {

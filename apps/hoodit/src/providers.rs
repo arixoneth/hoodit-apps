@@ -1,9 +1,7 @@
 use crate::app::{ReadContext, Runtime};
 use crate::model::{self, NETWORK};
 use aomi_sdk::DynToolCallCtx;
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::{StatusCode, header::RETRY_AFTER};
-use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::time::Duration;
@@ -221,12 +219,72 @@ fn not_found(
     })
 }
 
+/// GeckoTerminal market data. With an operator-configured CoinGecko key the
+/// same onchain endpoints are read through CoinGecko's keyed API, which has a
+/// higher allowance than the shared public GeckoTerminal limit.
 pub struct Gecko<'a> {
     runtime: &'a Runtime,
+    base: String,
+    key: Option<(&'static str, String)>,
 }
 impl<'a> Gecko<'a> {
-    pub fn new(runtime: &'a Runtime) -> Self {
-        Self { runtime }
+    pub fn new(runtime: &'a Runtime, ctx: &DynToolCallCtx) -> Self {
+        let secret = |name: &str| {
+            ctx.secrets
+                .get(name)
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+        };
+        match (secret("COINGECKO_PRO_API_KEY"), secret("COINGECKO_API_KEY")) {
+            (Some(key), _) => Self {
+                runtime,
+                base: format!("{}/onchain", runtime.origins.coingecko_pro),
+                key: Some(("x-cg-pro-api-key", key)),
+            },
+            (None, Some(key)) => Self {
+                runtime,
+                base: format!("{}/onchain", runtime.origins.coingecko),
+                key: Some(("x-cg-demo-api-key", key)),
+            },
+            (None, None) => Self {
+                runtime,
+                base: runtime.origins.gecko.clone(),
+                key: None,
+            },
+        }
+    }
+    fn get(
+        &self,
+        path: &str,
+        query: &[(String, String)],
+        ttl: Duration,
+        read: &mut ReadContext,
+    ) -> Result<Value, ProviderError> {
+        let headers = self
+            .key
+            .as_ref()
+            .map(|(name, key)| vec![(*name, key.as_str())])
+            .unwrap_or_default();
+        get(
+            self.runtime,
+            "geckoterminal",
+            &self.base,
+            path,
+            query,
+            &headers,
+            ttl,
+            self.key
+                .as_ref()
+                .map(|(name, key)| {
+                    if *name == "x-cg-pro-api-key" {
+                        format!("pro:{key}")
+                    } else {
+                        key.clone()
+                    }
+                })
+                .as_deref(),
+            read,
+        )
     }
     pub fn search(
         &self,
@@ -234,10 +292,7 @@ impl<'a> Gecko<'a> {
         page: u8,
         read: &mut ReadContext,
     ) -> Result<Value, ProviderError> {
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
+        self.get(
             "/search/pools",
             &[
                 ("network".into(), NETWORK.into()),
@@ -245,9 +300,7 @@ impl<'a> Gecko<'a> {
                 ("page".into(), page.to_string()),
                 ("include".into(), "base_token,quote_token,dex".into()),
             ],
-            &[],
             Duration::from_secs(20),
-            None,
             read,
         )
     }
@@ -277,34 +330,42 @@ impl<'a> Gecko<'a> {
             ("page".into(), page.to_string()),
             ("include".into(), "base_token,quote_token,dex".into()),
         ]);
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
-            &path,
-            &query,
-            &[],
-            Duration::from_secs(20),
-            None,
-            read,
-        )
+        self.get(&path, &query, Duration::from_secs(20), read)
     }
     pub fn token(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
         let token = address_segment(token)?;
         not_found(
-            get(
-                self.runtime,
-                "geckoterminal",
-                &self.runtime.origins.gecko,
+            self.get(
                 &format!("/networks/{NETWORK}/tokens/{token}"),
                 &[("include".into(), "top_pools".into())],
-                &[],
                 Duration::from_secs(20),
-                None,
                 read,
             ),
             "TOKEN_NOT_INDEXED",
             "token is not indexed",
+        )
+    }
+    /// Up to 30 exact tokens in one request; used for lifecycle annotation.
+    pub fn tokens(
+        &self,
+        tokens: &[String],
+        read: &mut ReadContext,
+    ) -> Result<Value, ProviderError> {
+        if tokens.is_empty() || tokens.len() > 30 {
+            return Err(ProviderError::schema(
+                "token batch must contain 1 to 30 addresses",
+            ));
+        }
+        let addresses = tokens
+            .iter()
+            .map(|token| address_segment(token))
+            .collect::<Result<Vec<_>, _>>()?
+            .join(",");
+        self.get(
+            &format!("/networks/{NETWORK}/tokens/multi/{addresses}"),
+            &[],
+            Duration::from_secs(20),
+            read,
         )
     }
     pub fn token_pools(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
@@ -318,18 +379,13 @@ impl<'a> Gecko<'a> {
     ) -> Result<Value, ProviderError> {
         let token = address_segment(token)?;
         not_found(
-            get(
-                self.runtime,
-                "geckoterminal",
-                &self.runtime.origins.gecko,
+            self.get(
                 &format!("/networks/{NETWORK}/tokens/{token}/pools"),
                 &[
                     ("include".into(), "base_token,quote_token,dex".into()),
                     ("page".into(), page.to_string()),
                 ],
-                &[],
                 Duration::from_secs(20),
-                None,
                 read,
             ),
             "NO_INDEXED_POOL",
@@ -339,15 +395,10 @@ impl<'a> Gecko<'a> {
     pub fn pool(&self, pool: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
         let pool = pool_segment(pool)?;
         not_found(
-            get(
-                self.runtime,
-                "geckoterminal",
-                &self.runtime.origins.gecko,
+            self.get(
                 &format!("/networks/{NETWORK}/pools/{pool}"),
                 &[("include".into(), "base_token,quote_token,dex".into())],
-                &[],
                 Duration::from_secs(20),
-                None,
                 read,
             ),
             "POOL_NOT_FOUND",
@@ -356,69 +407,27 @@ impl<'a> Gecko<'a> {
     }
     pub fn metadata(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
         let token = address_segment(token)?;
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
+        self.get(
             &format!("/networks/{NETWORK}/tokens/{token}/info"),
             &[],
-            &[],
             Duration::from_secs(60),
-            None,
             read,
         )
     }
     pub fn pool_info(&self, pool: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
         let pool = pool_segment(pool)?;
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
+        self.get(
             &format!("/networks/{NETWORK}/pools/{pool}/info"),
             &[("include".into(), "pool".into())],
-            &[],
             Duration::from_secs(60),
-            None,
             read,
         )
     }
     pub fn dexes(&self, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
+        self.get(
             &format!("/networks/{NETWORK}/dexes"),
             &[],
-            &[],
             Duration::from_secs(300),
-            None,
-            read,
-        )
-    }
-    pub fn token_prices(
-        &self,
-        tokens: &[String],
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        if tokens.is_empty() || tokens.len() > 30 {
-            return Err(ProviderError::schema(
-                "token price batch must contain 1 to 30 addresses",
-            ));
-        }
-        let addresses = tokens
-            .iter()
-            .map(|token| address_segment(token))
-            .collect::<Result<Vec<_>, _>>()?
-            .join(",");
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
-            &format!("/simple/networks/{NETWORK}/token_price/{addresses}"),
-            &[],
-            &[],
-            Duration::from_secs(20),
-            None,
             read,
         )
     }
@@ -434,10 +443,7 @@ impl<'a> Gecko<'a> {
         read: &mut ReadContext,
     ) -> Result<Value, ProviderError> {
         let pool = pool_segment(pool)?;
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
+        self.get(
             &format!("/networks/{NETWORK}/pools/{pool}/ohlcv/{timeframe}"),
             &[
                 ("aggregate".into(), aggregate.to_string()),
@@ -447,9 +453,7 @@ impl<'a> Gecko<'a> {
                 ("token".into(), token.into()),
                 ("include_empty_intervals".into(), "false".into()),
             ],
-            &[],
-            Duration::from_secs(15),
-            None,
+            Duration::from_secs(60),
             read,
         )
     }
@@ -461,18 +465,13 @@ impl<'a> Gecko<'a> {
         read: &mut ReadContext,
     ) -> Result<Value, ProviderError> {
         let pool = pool_segment(pool)?;
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.runtime.origins.gecko,
+        self.get(
             &format!("/networks/{NETWORK}/pools/{pool}/trades"),
             &[
                 ("token".into(), token.into()),
                 ("trade_volume_in_usd_greater_than".into(), min.into()),
             ],
-            &[],
             Duration::from_secs(10),
-            None,
             read,
         )
     }
@@ -482,31 +481,6 @@ pub struct GoPlus<'a> {
     runtime: &'a Runtime,
 }
 
-pub struct CoinGecko<'a> {
-    runtime: &'a Runtime,
-}
-impl<'a> CoinGecko<'a> {
-    pub fn new(runtime: &'a Runtime) -> Self {
-        Self { runtime }
-    }
-
-    pub fn eth_price(&self, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        get(
-            self.runtime,
-            "coingecko",
-            &self.runtime.origins.coingecko,
-            "/simple/price",
-            &[
-                ("ids".into(), "ethereum".into()),
-                ("vs_currencies".into(), "usd".into()),
-            ],
-            &[],
-            Duration::from_secs(20),
-            None,
-            read,
-        )
-    }
-}
 impl<'a> GoPlus<'a> {
     pub fn new(runtime: &'a Runtime) -> Self {
         Self { runtime }
@@ -532,245 +506,26 @@ impl<'a> GoPlus<'a> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Cursor {
-    v: u8,
-    chain: u64,
-    wallet: String,
-    hop: u8,
-    next: InventoryNext,
-}
-#[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct InventoryNext {
-    id: u64,
-    value: String,
-    fiat_value: Option<String>,
-    items_count: u16,
-}
-pub struct Inventory {
-    pub items: Vec<Value>,
-    pub next_cursor: Option<String>,
-}
-pub struct Blockscout<'a> {
-    runtime: &'a Runtime,
-    key: String,
-}
-impl<'a> Blockscout<'a> {
-    pub fn from_ctx(runtime: &'a Runtime, ctx: &DynToolCallCtx) -> Result<Self, ProviderError> {
-        ctx.secrets.get("BLOCKSCOUT_API_KEY").map(|key|key.trim()).filter(|key|!key.is_empty()).map(|key|Self{runtime,key:key.to_string()}).ok_or_else(|| ProviderError {
-            code: "PROVIDER_NOT_CONFIGURED",
-            message: "Hoodit wallet reads are temporarily unavailable because the operator-managed provider configuration is missing.".into(),
-            retryable: false,
-        })
-    }
-    pub fn inventory(
-        &self,
-        wallet: &str,
-        cursor: Option<&str>,
-        read: &mut ReadContext,
-    ) -> Result<Inventory, ProviderError> {
-        let wallet = address_segment(wallet)?;
-        let mut hop = 0;
-        let mut query = vec![
-            ("type".into(), "ERC-20".into()),
-            ("apikey".into(), self.key.clone()),
-        ];
-        if let Some(raw) = cursor {
-            if raw.len() > 4096 {
-                return Err(ProviderError {
-                    code: "INVALID_CURSOR",
-                    message: "inventory cursor is too large".into(),
-                    retryable: false,
-                });
-            }
-            let decoded = URL_SAFE_NO_PAD.decode(raw).map_err(|_| ProviderError {
-                code: "INVALID_CURSOR",
-                message: "invalid inventory cursor".into(),
-                retryable: false,
-            })?;
-            let c: Cursor = serde_json::from_slice(&decoded).map_err(|_| ProviderError {
-                code: "INVALID_CURSOR",
-                message: "invalid inventory cursor".into(),
-                retryable: false,
-            })?;
-            if c.v != 1
-                || c.chain != model::CHAIN_ID
-                || c.wallet != wallet
-                || c.hop >= 100
-                || !valid_cursor_value(&c.next.value)
-                || c.next.items_count != 50
-            {
-                return Err(ProviderError {
-                    code: "INVALID_CURSOR",
-                    message: "cursor does not belong to this wallet or traversal".into(),
-                    retryable: false,
-                });
-            }
-            hop = c.hop;
-            query.extend(c.next.query());
-        }
-        let value = get(
-            self.runtime,
-            "blockscout",
-            &self.runtime.origins.blockscout,
-            &format!("/api/v2/addresses/{wallet}/tokens"),
-            &query,
-            &[],
-            Duration::from_secs(10),
-            Some(&self.key),
-            read,
-        )?;
-        let items = value
-            .get("items")
-            .and_then(Value::as_array)
-            .cloned()
-            .ok_or_else(|| ProviderError::schema("Blockscout inventory is missing items"))?;
-        if items.len() > 50 {
-            return Err(ProviderError::schema(
-                "Blockscout inventory page exceeds the supported bound",
-            ));
-        }
-        let next = parse_next(value.get("next_page_params"))?
-            .map(|next| {
-                serde_json::to_vec(&Cursor {
-                    v: 1,
-                    chain: model::CHAIN_ID,
-                    wallet,
-                    hop: hop + 1,
-                    next,
-                })
-                .map(|bytes| URL_SAFE_NO_PAD.encode(bytes))
-                .map_err(|_| ProviderError::schema("failed to encode inventory cursor"))
-            })
-            .transpose()?;
-        Ok(Inventory {
-            items,
-            next_cursor: next,
-        })
-    }
-    fn compat(
-        &self,
-        action: &str,
-        wallet: &str,
-        token: Option<&str>,
-        read: &mut ReadContext,
-    ) -> Result<String, ProviderError> {
-        let wallet = address_segment(wallet)?;
-        let mut q = vec![
-            ("module".into(), "account".into()),
-            ("action".into(), action.into()),
-            ("address".into(), wallet),
-            ("apikey".into(), self.key.clone()),
-        ];
-        if let Some(t) = token {
-            q.push(("contractaddress".into(), address_segment(t)?))
-        }
-        let v = get(
-            self.runtime,
-            "blockscout",
-            &self.runtime.origins.blockscout,
-            "/api",
-            &q,
-            &[],
-            Duration::from_secs(5),
-            Some(&self.key),
-            read,
-        )?;
-        if model::string(&v, &["status"]).as_deref() != Some("1") {
-            return Err(ProviderError::unavailable(
-                "Blockscout could not establish the balance",
-            ));
-        }
-        model::string(&v, &["result"])
-            .ok_or_else(|| ProviderError::schema("Blockscout balance is missing result"))
-    }
-    pub fn native_balance(
-        &self,
-        wallet: &str,
-        read: &mut ReadContext,
-    ) -> Result<String, ProviderError> {
-        self.compat("balance", wallet, None, read)
-    }
-    pub fn token_balance(
-        &self,
-        wallet: &str,
-        token: &str,
-        read: &mut ReadContext,
-    ) -> Result<String, ProviderError> {
-        self.compat("tokenbalance", wallet, Some(token), read)
-    }
-    pub fn token_info(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        let token = address_segment(token)?;
-        get(
-            self.runtime,
-            "blockscout",
-            &self.runtime.origins.blockscout,
-            &format!("/api/v2/tokens/{token}"),
-            &[("apikey".into(), self.key.clone())],
-            &[],
-            Duration::from_secs(60),
-            Some(&self.key),
-            read,
-        )
-    }
-}
-
-impl InventoryNext {
-    fn query(self) -> Vec<(String, String)> {
-        let mut query = vec![
-            ("id".into(), self.id.to_string()),
-            ("value".into(), self.value),
-            ("items_count".into(), self.items_count.to_string()),
-        ];
-        if let Some(value) = self.fiat_value {
-            query.push(("fiat_value".into(), value));
-        }
-        query
-    }
-}
-
-fn valid_cursor_value(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 78 && value.bytes().all(|b| b.is_ascii_digit())
-}
-
-fn parse_next(value: Option<&Value>) -> Result<Option<InventoryNext>, ProviderError> {
-    let Some(value) = value else {
-        return Err(ProviderError::schema(
-            "Blockscout inventory is missing next_page_params",
-        ));
-    };
-    if value.is_null() {
-        return Ok(None);
-    }
-    let next: InventoryNext = serde_json::from_value(value.clone()).map_err(|_| {
-        ProviderError::schema("Blockscout returned an invalid inventory continuation")
-    })?;
-    if !valid_cursor_value(&next.value) || next.items_count != 50 {
-        return Err(ProviderError::schema(
-            "Blockscout returned an unsupported inventory continuation",
-        ));
-    }
-    Ok(Some(next))
-}
-
 pub struct Lifi<'a> {
     runtime: &'a Runtime,
 }
 impl<'a> Lifi<'a> {
-    pub fn from_ctx(runtime: &'a Runtime, _ctx: &DynToolCallCtx) -> Self {
+    pub fn new(runtime: &'a Runtime) -> Self {
         Self { runtime }
     }
+    /// Read-only same-chain quote; `to` is USDG, a token, or the native sentinel.
+    /// Calldata and approval transactions are discarded.
     pub fn quote(
         &self,
         wallet: &str,
         from: &str,
+        to: &str,
         amount: &str,
         read: &mut ReadContext,
     ) -> Result<Value, ProviderError> {
         let wallet = address_segment(wallet)?;
         let from = address_segment(from)?;
+        let to = address_segment(to)?;
         if amount.is_empty() || amount.len() > 78 || !amount.bytes().all(|b| b.is_ascii_digit()) {
             return Err(ProviderError::schema(
                 "invalid quote amount passed to provider adapter",
@@ -780,7 +535,7 @@ impl<'a> Lifi<'a> {
             ("fromChain".into(), model::CHAIN_ID.to_string()),
             ("toChain".into(), model::CHAIN_ID.to_string()),
             ("fromToken".into(), from.clone()),
-            ("toToken".into(), model::USDG.into()),
+            ("toToken".into(), to.clone()),
             ("fromAmount".into(), amount.into()),
             ("fromAddress".into(), wallet.clone()),
             ("toAddress".into(), wallet.clone()),
@@ -798,7 +553,7 @@ impl<'a> Lifi<'a> {
             None,
             read,
         )?;
-        validate_quote(&value, &wallet, &from, amount)?;
+        validate_quote(&value, &wallet, &from, &to, amount)?;
         value
             .as_object_mut()
             .map(|object| object.remove("transactionRequest"));
@@ -810,6 +565,7 @@ fn validate_quote(
     value: &Value,
     wallet: &str,
     from: &str,
+    to: &str,
     amount: &str,
 ) -> Result<(), ProviderError> {
     let chain = |path: &[&str]| {
@@ -823,13 +579,13 @@ fn validate_quote(
         && model::string(value, &["action", "fromToken", "address"])
             .is_some_and(|v| v.eq_ignore_ascii_case(from))
         && model::string(value, &["action", "toToken", "address"])
-            .is_some_and(|v| v.eq_ignore_ascii_case(model::USDG))
+            .is_some_and(|v| v.eq_ignore_ascii_case(to))
         && model::string(value, &["action", "fromAddress"])
             .is_some_and(|v| v.eq_ignore_ascii_case(wallet))
         && model::string(value, &["action", "toAddress"])
             .is_some_and(|v| v.eq_ignore_ascii_case(wallet))
         && model::string(value, &["estimate", "fromAmount"]).as_deref() == Some(amount)
-        && model::string(value, &["estimate", "toAmount"]).is_some_and(|v| valid_cursor_value(&v));
+        && model::string(value, &["estimate", "toAmount"]).is_some_and(|v| is_atomic(&v));
     if matches {
         Ok(())
     } else {
@@ -837,6 +593,10 @@ fn validate_quote(
             "LI.FI quote does not match the request",
         ))
     }
+}
+
+fn is_atomic(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 78 && value.bytes().all(|b| b.is_ascii_digit())
 }
 
 pub fn included_map(value: &Value) -> Map<String, Value> {
@@ -969,26 +729,6 @@ mod tests {
     }
 
     #[test]
-    fn inventory_continuation_accepts_only_the_live_shape() {
-        let live = json!({"id":2215310099_u64,"value":"100436000000000000000","fiat_value":null,"items_count":50});
-        let next = parse_next(Some(&live)).unwrap().unwrap();
-        assert_eq!(
-            next.query(),
-            vec![
-                ("id".into(), "2215310099".into()),
-                ("value".into(), "100436000000000000000".into()),
-                ("items_count".into(), "50".into())
-            ]
-        );
-
-        let override_attempt =
-            json!({"id":1,"value":"1","fiat_value":null,"items_count":50,"type":"ERC-721"});
-        assert!(parse_next(Some(&override_attempt)).is_err());
-        let wrong_bound = json!({"id":1,"value":"1","fiat_value":null,"items_count":20});
-        assert!(parse_next(Some(&wrong_bound)).is_err());
-    }
-
-    #[test]
     fn pool_normalization_keeps_v4_id_and_complete_windows() {
         let raw = json!({
             "id":"robinhood_0x4be9657ec9002e528f4f17a5c43edc525a07f888f7b180c2afbf75e096c4f38a",
@@ -1035,14 +775,14 @@ mod tests {
         let wallet = "0xb202bb725c85b90bd847d350ebc7f16ff8408ed8";
         let from = "0x39dbed3a2bd333467115de45665cc57f813c4571";
         let quote = json!({"action":{"fromChainId":4663,"toChainId":4663,"fromAmount":"1000000000000000000","fromAddress":wallet,"toAddress":wallet,"fromToken":{"address":from,"chainId":4663},"toToken":{"address":model::USDG,"chainId":4663}},"estimate":{"fromAmount":"1000000000000000000","toAmount":"636098"}});
-        assert!(validate_quote(&quote, wallet, from, "1000000000000000000").is_ok());
+        assert!(validate_quote(&quote, wallet, from, model::USDG, "1000000000000000000").is_ok());
         let mut wrong = quote;
         wrong["action"]["toChainId"] = json!(1);
-        assert!(validate_quote(&wrong, wallet, from, "1000000000000000000").is_err());
+        assert!(validate_quote(&wrong, wallet, from, model::USDG, "1000000000000000000").is_err());
     }
 
     #[test]
-    fn lifi_is_keyless_even_when_context_contains_a_legacy_key() {
+    fn lifi_quotes_are_keyless() {
         let wallet = "0xb202bb725c85b90bd847d350ebc7f16ff8408ed8";
         let from = "0x39dbed3a2bd333467115de45665cc57f813c4571";
         let amount = "1000000000000000000";
@@ -1063,22 +803,14 @@ mod tests {
                 gecko: base.clone(),
                 goplus: base.clone(),
                 coingecko: base.clone(),
-                blockscout: base.clone(),
+                coingecko_pro: base.clone(),
                 lifi: base,
             },
         );
-        let mut secrets = std::collections::HashMap::new();
-        secrets.insert("LIFI_API_KEY".into(), "legacy-user-key".into());
-        let ctx = DynToolCallCtx {
-            session_id: "test".into(),
-            tool_name: "holding".into(),
-            call_id: "1".into(),
-            state_attributes: Default::default(),
-            secrets,
-        };
-        let lifi = Lifi::from_ctx(&runtime, &ctx);
-        let mut read = ReadContext::portfolio(false);
-        lifi.quote(wallet, from, amount, &mut read).unwrap();
+        let lifi = Lifi::new(&runtime);
+        let mut read = ReadContext::exit(false);
+        lifi.quote(wallet, from, model::USDG, amount, &mut read)
+            .unwrap();
         let request = request.recv_timeout(Duration::from_secs(1)).unwrap();
         assert!(!request.to_ascii_lowercase().contains("x-lifi-api-key"));
         assert!(!request.contains("legacy-user-key"));
@@ -1094,7 +826,7 @@ mod tests {
                 gecko: base.clone(),
                 goplus: base.clone(),
                 coingecko: base.clone(),
-                blockscout: base.clone(),
+                coingecko_pro: base.clone(),
                 lifi: base.clone(),
             },
         );
@@ -1125,7 +857,7 @@ mod tests {
                 gecko: base.clone(),
                 goplus: base.clone(),
                 coingecko: base.clone(),
-                blockscout: base.clone(),
+                coingecko_pro: base.clone(),
                 lifi: base.clone(),
             },
         );

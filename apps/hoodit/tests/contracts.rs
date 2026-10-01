@@ -1,11 +1,10 @@
 use aomi_sdk::{DynAomiApp, DynAomiTool, DynToolCallCtx};
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use hoodit::app::{HooditApp, ProviderOrigins, Runtime};
 use hoodit::tools::{
-    CandlesArgs, DiscoverArgs, DiscoverPools, GetCandles, GetHolding, GetMarketOptions,
-    GetPortfolio, GetToken, GetTokenPools, GetTrades, HoldingArgs, MarketOptionsArgs,
-    PortfolioArgs, SearchArgs, SearchTokens, TokenArgs, TokenPoolsArgs, TradesArgs,
+    CandlesArgs, CheckExit, DiscoverArgs, DiscoverPools, ExitArgs, GetCandles, GetMarketOptions,
+    GetToken, GetTokenPools, GetTrades, MarketOptionsArgs, SearchArgs, SearchTokens, TokenArgs,
+    TokenPoolsArgs, TradesArgs,
 };
 use reqwest::blocking::Client;
 use serde::de::DeserializeOwned;
@@ -99,28 +98,16 @@ fn optional_nulls_are_omissions_but_unknown_and_required_nulls_are_rejected() {
     )
     .unwrap();
     assert!(trades.pool_id.is_none() && trades.limit.is_none() && trades.min_volume_usd.is_none());
-    let portfolio: PortfolioArgs = serde_json::from_value(
-        json!({"wallet_address":wallet,"cursor":null,"include_quotes":null,"valuation":null,"security":null,"sort":null,"min_value_usd":null,"include_unpriced":null,"refresh":null}),
-    )
-    .unwrap();
+    let exit: ExitArgs = serde_json::from_value(json!({"token":token,"mode":null,"amount":null,"fraction_bps":null,"eth_amount":null,"receive":null,"wallet_address":null})).unwrap();
     assert!(
-        portfolio.cursor.is_none()
-            && portfolio.include_quotes.is_none()
-            && portfolio.refresh.is_none()
+        exit.mode.is_none()
+            && exit.amount.is_none()
+            && exit.fraction_bps.is_none()
+            && exit.wallet_address.is_none()
     );
-    let holding: HoldingArgs = serde_json::from_value(json!({"wallet_address":wallet,"token":"native","quote_balance_bps":null,"include_quote":null,"security":null,"refresh":null})).unwrap();
-    assert!(
-        holding.quote_balance_bps.is_none()
-            && holding.include_quote.is_none()
-            && holding.refresh.is_none()
-    );
-    for cursor in [json!("null"), json!(" NULL "), json!(""), json!("   ")] {
-        let args: PortfolioArgs =
-            serde_json::from_value(json!({"wallet_address":wallet,"cursor":cursor})).unwrap();
-        assert!(args.cursor.is_none());
-    }
     rejects::<SearchArgs>(json!({"query":null}));
-    rejects::<PortfolioArgs>(json!({"wallet_address":null}));
+    rejects::<ExitArgs>(json!({"token":null}));
+    rejects::<ExitArgs>(json!({"token":token,"wallet_address":wallet,"execute":true}));
     rejects::<SearchArgs>(json!({"query":"PONS","execute_now":true}));
 }
 
@@ -132,7 +119,7 @@ fn generated_manifest_exposes_strict_compatible_skill_inputs() {
         .iter()
         .map(|tool| (tool.name.as_str(), tool))
         .collect();
-    assert_eq!(tools.len(), 9);
+    assert_eq!(tools.len(), 8);
     for (name, tool) in &tools {
         assert!(
             tool.description.len() >= 80,
@@ -152,39 +139,14 @@ fn generated_manifest_exposes_strict_compatible_skill_inputs() {
             );
         }
     }
-    let portfolio = &tools["hoodit_get_portfolio"].parameters_schema;
-    assert!(portfolio["properties"].get("page").is_none());
-    assert!(portfolio["properties"].get("page_size").is_none());
-    assert_eq!(portfolio["properties"]["include_quotes"]["default"], false);
-    let cursor_schema = &portfolio["properties"]["cursor"];
-    assert!(
-        allows_null(cursor_schema),
-        "strict tool schemas require a nullable first-page cursor: {cursor_schema:#}"
-    );
-    let cursor_types = cursor_schema["type"]
-        .as_array()
-        .expect("cursor must use a provider-compatible string/null type union");
-    assert!(cursor_types.iter().any(|kind| kind == "string"));
-    assert!(cursor_types.iter().any(|kind| kind == "null"));
-    assert_eq!(cursor_schema["minLength"], 1);
-    assert_eq!(cursor_schema["maxLength"], 4096);
-    assert_eq!(cursor_schema["pattern"], "^[A-Za-z0-9_-]+$");
-    assert!(
-        cursor_schema["description"]
-            .as_str()
-            .unwrap()
-            .contains("first page"),
-        "{cursor_schema:#}"
-    );
-    assert!(cursor_schema.get("default").is_none(), "{cursor_schema:#}");
-    let holding = &tools["hoodit_get_holding"].parameters_schema;
-    assert_eq!(holding["properties"]["quote_balance_bps"]["minimum"], 1);
-    assert_eq!(
-        holding["properties"]["quote_balance_bps"]["maximum"],
-        10_000
-    );
-    assert_eq!(holding["properties"]["quote_balance_bps"]["default"], 100);
-    assert_eq!(holding["properties"]["include_quote"]["default"], false);
+    assert!(!tools.contains_key("hoodit_get_portfolio"));
+    assert!(!tools.contains_key("hoodit_get_holding"));
+    let exit = &tools["hoodit_check_exit"].parameters_schema;
+    assert_eq!(exit["properties"]["fraction_bps"]["minimum"], 1);
+    assert_eq!(exit["properties"]["fraction_bps"]["maximum"], 10_000);
+    assert_eq!(exit["properties"]["fraction_bps"]["default"], 10_000);
+    assert_eq!(exit["properties"]["mode"]["default"], "sell");
+    assert!(allows_null(&exit["properties"]["wallet_address"]));
     let trades = &tools["hoodit_get_trades"].parameters_schema;
     assert_eq!(trades["properties"]["side"]["default"], "both");
 }
@@ -199,30 +161,6 @@ fn mock_body(path: &str) -> Value {
         {"type":"token","id":format!("robinhood_{other}"),"attributes":{"address":other,"symbol":"USDG","name":"USDG","decimals":6}},
         {"type":"dex","id":"example-dex","attributes":{"name":"Example DEX"}}
     ]);
-    if path.contains("/api/v2/addresses/") && path.contains("/tokens") {
-        if path.contains("id=7") {
-            return json!({"items":[{"token":{"address_hash":token,"symbol":"EX","name":"Example","decimals":"18","icon_url":null},"value":"1000000000000000000","token_id":null}],"next_page_params":null});
-        }
-        return json!({"items":[{"token":{"address_hash":token,"symbol":"EX","name":"Example","decimals":"18","icon_url":null},"value":"1000000000000000000","token_id":null}],"next_page_params":null});
-    }
-    if path.contains("action=tokenbalance") {
-        return json!({"status":"1","message":"OK","result":"1000000000000000000"});
-    }
-    if path.contains("action=balance") {
-        return json!({"status":"1","message":"OK","result":"1000000000000000000"});
-    }
-    if path.contains("/api/v2/tokens/") {
-        if path
-            .to_ascii_lowercase()
-            .contains("0x5fc5360d0400a0fd4f2af552add042d716f1d168")
-        {
-            return json!({"address_hash":"0x5fc5360d0400a0fd4f2af552add042d716f1d168","symbol":"USDG","name":"Global Dollar","decimals":"6"});
-        }
-        if path.contains("0x4444444444444444444444444444444444444444") {
-            return json!({"address_hash":"0x4444444444444444444444444444444444444444","symbol":"UNKNOWN","name":"Unknown Decimals","decimals":null});
-        }
-        return json!({"address_hash":token,"symbol":"EX","name":"Example","decimals":"18"});
-    }
     if path.contains("/ohlcv/") {
         return serde_json::from_str(r#"{"data":{"attributes":{"ohlcv_list":[[1700000000,0.123456789012345678901234567890123456,0.2,0.1,0.15,123.456789012345678901234567890123456]]}}}"#).unwrap();
     }
@@ -230,7 +168,7 @@ fn mock_body(path: &str) -> Value {
         return json!({"data":[{"type":"dex","id":"example-dex","attributes":{"name":"Example DEX"}}]});
     }
     if path.contains("/trades") {
-        return json!({"data":[{"type":"trade","id":"trade-1","attributes":{"tx_hash":format!("0x{}", "a".repeat(64)),"block_timestamp":Utc::now().to_rfc3339(),"kind":"buy","from_token_address":other,"to_token_address":token,"from_token_amount":"1","to_token_amount":"2","price_to_in_usd":"0.5","volume_in_usd":"1"}}]});
+        return json!({"data":[{"type":"trade","id":"trade-1","attributes":{"tx_hash":format!("0x{}", "a".repeat(64)),"block_timestamp":Utc::now().to_rfc3339(),"block_number":123,"tx_from_address":"0x00000000000000000000000000000000000000aa","kind":"buy","from_token_address":other,"to_token_address":token,"from_token_amount":"1","to_token_amount":"2","price_to_in_usd":"0.5","volume_in_usd":"1"}}]});
     }
     if path.starts_with("/quote?") {
         let params = url::Url::parse(&format!("http://fixture{path}"))
@@ -239,6 +177,7 @@ fn mock_body(path: &str) -> Value {
             .into_owned()
             .collect::<HashMap<_, _>>();
         let from = params["fromToken"].clone();
+        let to = params["toToken"].clone();
         let amount = params["fromAmount"].clone();
         let wallet = params["fromAddress"].clone();
         return json!({
@@ -247,17 +186,21 @@ fn mock_body(path: &str) -> Value {
                 "fromChainId":4663,"toChainId":4663,"fromAmount":amount,
                 "fromAddress":wallet,"toAddress":wallet,
                 "fromToken":{"chainId":4663,"address":from,"decimals":18},
-                "toToken":{"chainId":4663,"address":"0x5fc5360d0400a0fd4f2af552add042d716f1d168","decimals":6}
+                "toToken":{"chainId":4663,"address":to,"decimals":18}
             },
-            "estimate":{"fromAmount":amount,"toAmount":"1000000","toAmountMin":"995000","gasCosts":[{"amountUSD":"0.001"}]},
+            "estimate":{"fromAmount":amount,"toAmount":"1000000","toAmountMin":"995000","fromAmountUSD":"10","toAmountUSD":"9.5","gasCosts":[{"amountUSD":"0.001"}],"feeCosts":[{"amountUSD":"0.0025"}]},
             "transactionRequest":{"data":"excluded-by-adapter"}
         });
     }
     if path.contains("/tokens/") && path.ends_with("/info") {
         return json!({"data":{"type":"token_info","id":format!("robinhood_{token}"),"attributes":{"websites":[],"description":"Synthetic"}}});
     }
+    let token_resource = json!({"type":"token","id":format!("robinhood_{token}"),"attributes":{"address":token,"symbol":"EX","name":"Example","decimals":18,"price_usd":"0.123456789012345678901234567890123456","market_cap_usd":null,"fdv_usd":"1000","volume_usd":{"h24":"8"},"launchpad_details":{"graduation_percentage":100.0,"completed":true,"completed_at":"2026-09-07T16:17:38.000Z","migrated_destination_pool_address":pool}}});
+    if path.contains("/networks/robinhood/tokens/multi/") {
+        return json!({"data":[token_resource]});
+    }
     if path.contains("/networks/robinhood/tokens/") && !path.contains("/pools") {
-        return json!({"data":{"type":"token","id":format!("robinhood_{token}"),"attributes":{"address":token,"symbol":"EX","name":"Example","decimals":18,"price_usd":"0.123456789012345678901234567890123456","market_cap_usd":null,"fdv_usd":"1000","volume_usd":{"h24":"8"}}}});
+        return json!({"data":token_resource});
     }
     if path.contains("/search/pools")
         || path.contains("/new_pools")
@@ -290,7 +233,7 @@ fn mock_app() -> HooditApp {
             gecko: base.clone(),
             goplus: base.clone(),
             coingecko: base.clone(),
-            blockscout: base.clone(),
+            coingecko_pro: base.clone(),
             lifi: base,
         },
     );
@@ -303,14 +246,8 @@ fn ctx(name: &str) -> DynToolCallCtx {
         tool_name: name.into(),
         call_id: format!("{name}-1"),
         state_attributes: Default::default(),
-        secrets: HashMap::from([("BLOCKSCOUT_API_KEY".into(), "fixture-key".into())]),
+        secrets: HashMap::new(),
     }
-}
-
-fn ctx_without_secrets(name: &str) -> DynToolCallCtx {
-    let mut context = ctx(name);
-    context.secrets.clear();
-    context
 }
 
 fn pagination_mock_app() -> HooditApp {
@@ -363,7 +300,7 @@ fn pagination_mock_app() -> HooditApp {
             gecko: base.clone(),
             goplus: base.clone(),
             coingecko: base.clone(),
-            blockscout: base.clone(),
+            coingecko_pro: base.clone(),
             lifi: base,
         },
     );
@@ -408,14 +345,6 @@ fn discovery_cursor_resumes_inside_a_page_for_non_screened_feeds() {
 fn emits_one_success_envelope_for_every_tool() {
     let app = mock_app();
     let token = "0x1111111111111111111111111111111111111111";
-    let wallet = "0x3333333333333333333333333333333333333333";
-    let cursor = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&json!({
-            "v":1,"chain":4663,"wallet":wallet,"hop":1,
-            "next":{"id":7,"value":"1000000000000000000","fiat_value":null,"items_count":50}
-        }))
-        .unwrap(),
-    );
     let mut cases = vec![
         json!({"tool":"hoodit_search_tokens","input":{"query":"EX"},"output":SearchTokens::run(&app, serde_json::from_value(json!({"query":"EX"})).unwrap(), ctx("hoodit_search_tokens")).unwrap()}),
         json!({"tool":"hoodit_discover_pools","input":{},"output":DiscoverPools::run(&app, serde_json::from_value(json!({})).unwrap(), ctx("hoodit_discover_pools")).unwrap()}),
@@ -424,8 +353,7 @@ fn emits_one_success_envelope_for_every_tool() {
         json!({"tool":"hoodit_get_market_options","input":{},"output":GetMarketOptions::run(&app, serde_json::from_value::<MarketOptionsArgs>(json!({})).unwrap(), ctx("hoodit_get_market_options")).unwrap()}),
         json!({"tool":"hoodit_get_candles","input":{"token":token,"before":1700000100},"output":GetCandles::run(&app, serde_json::from_value(json!({"token":token,"before":1700000100})).unwrap(), ctx("hoodit_get_candles")).unwrap()}),
         json!({"tool":"hoodit_get_trades","input":{"token":token},"output":GetTrades::run(&app, serde_json::from_value(json!({"token":token})).unwrap(), ctx("hoodit_get_trades")).unwrap()}),
-        json!({"tool":"hoodit_get_portfolio","input":{"wallet_address":wallet},"output":GetPortfolio::run(&app, serde_json::from_value(json!({"wallet_address":wallet})).unwrap(), ctx("hoodit_get_portfolio")).unwrap()}),
-        json!({"tool":"hoodit_get_holding","input":{"wallet_address":wallet,"token":token,"include_quote":false},"output":GetHolding::run(&app, serde_json::from_value(json!({"wallet_address":wallet,"token":token,"include_quote":false})).unwrap(), ctx("hoodit_get_holding")).unwrap()}),
+        json!({"tool":"hoodit_check_exit","input":{"token":token,"amount":"1000","fraction_bps":5000},"output":CheckExit::run(&app, serde_json::from_value(json!({"token":token,"amount":"1000","fraction_bps":5000})).unwrap(), ctx("hoodit_check_exit")).unwrap()}),
     ];
     for case in &cases {
         assert_eq!(case["output"]["status"], "ok", "{}", case["tool"]);
@@ -451,150 +379,76 @@ fn emits_one_success_envelope_for_every_tool() {
     assert_eq!(cases[5]["output"]["data"]["coverage"]["returned"], 1);
     assert_eq!(cases[6]["output"]["data"]["coverage"]["returned"], 1);
     assert_eq!(
-        cases[7]["output"]["data"]["pagination"],
-        json!({"provider_rows_returned":1,"displayed":2,"next_cursor":null})
+        cases[2]["output"]["data"]["lifecycle"]["state"],
+        "graduated"
     );
-    assert_eq!(cases[8]["output"]["data"]["requested_balance_bps"], 100);
     assert_eq!(
-        cases[8]["output"]["data"]["sell_amount"]["atomic"],
-        "10000000000000000"
+        cases[2]["output"]["data"]["lifecycle"]["destination_pool_id"],
+        cases[2]["output"]["data"]["selected_pool"]["pool_id"]
     );
-    let missing_provider = json!({
-        "tool":"hoodit_get_portfolio",
-        "input":{"wallet_address":wallet},
-        "output":GetPortfolio::run(
+    assert_eq!(
+        cases[1]["output"]["data"]["pools"][0]["lifecycle"]["state"],
+        "graduated"
+    );
+    let trade = &cases[6]["output"]["data"]["trades"][0];
+    assert_eq!(
+        trade["sender"],
+        "0x00000000000000000000000000000000000000aa"
+    );
+    assert_eq!(trade["block_number"], 123);
+    assert_eq!(cases[6]["output"]["data"]["summary"]["distinct_senders"], 1);
+    let sell = &cases[7]["output"]["data"]["sell"];
+    assert_eq!(sell["amount_in"]["formatted"], "500");
+    assert_eq!(sell["amount_in"]["atomic"], "500000000000000000000");
+    assert_eq!(sell["loss_pct"], "5");
+    assert_eq!(cases[7]["output"]["data"]["sender_kind"], "placeholder");
+    assert_eq!(cases[7]["output"]["data"]["coverage"]["executable"], false);
+    let round_trip_app = mock_app();
+    let round_trip = json!({
+        "tool":"hoodit_check_exit",
+        "input":{"token":token,"mode":"round_trip","eth_amount":"0.05","wallet_address":"0x3333333333333333333333333333333333333333"},
+        "output":CheckExit::run(
+            &round_trip_app,
+            serde_json::from_value(json!({"token":token,"mode":"round_trip","eth_amount":"0.05","wallet_address":"0x3333333333333333333333333333333333333333"})).unwrap(),
+            ctx("hoodit_check_exit"),
+        ).unwrap()
+    });
+    assert_eq!(round_trip["output"]["status"], "ok", "{round_trip:#}");
+    assert_eq!(
+        round_trip["output"]["data"]["buy"]["amount_in"]["atomic"],
+        "50000000000000000"
+    );
+    assert_eq!(
+        round_trip["output"]["data"]["sell"]["amount_in"]["atomic"],
+        "1000000"
+    );
+    assert!(round_trip["output"]["data"]["round_trip_loss_pct"].is_string());
+    cases.push(round_trip);
+    let missing_amount = json!({
+        "tool":"hoodit_check_exit",
+        "input":{"token":token},
+        "output":CheckExit::run(
             &app,
-            serde_json::from_value(json!({"wallet_address":wallet})).unwrap(),
-            ctx_without_secrets("hoodit_get_portfolio"),
+            serde_json::from_value(json!({"token":token})).unwrap(),
+            ctx("hoodit_check_exit"),
         ).unwrap()
     });
-    assert_eq!(missing_provider["output"]["status"], "error");
+    assert_eq!(missing_amount["output"]["status"], "error");
     assert_eq!(
-        missing_provider["output"]["error"]["code"],
-        "PROVIDER_NOT_CONFIGURED"
-    );
-    assert!(
-        missing_provider["output"]["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("operator-managed provider configuration is missing")
-    );
-    cases.push(missing_provider);
-    let quoted_app = mock_app();
-    let quoted = json!({
-        "tool":"hoodit_get_holding",
-        "input":{"wallet_address":wallet,"token":token,"quote_balance_bps":5000,"include_quote":true},
-        "output":GetHolding::run(
-            &quoted_app,
-            serde_json::from_value(json!({"wallet_address":wallet,"token":token,"quote_balance_bps":5000,"include_quote":true})).unwrap(),
-            ctx("hoodit_get_holding"),
-        ).unwrap()
-    });
-    assert_eq!(
-        quoted["output"]["data"]["holding"]["valuation"]["status"], "quoted",
-        "{quoted:#}"
-    );
-    assert_eq!(
-        quoted["output"]["data"]["holding"]["valuation"]["quote"]["input_amount"]["atomic"],
-        "500000000000000000"
-    );
-    cases.push(quoted);
-    let continuation_app = mock_app();
-    let continuation = json!({
-        "tool":"hoodit_get_portfolio",
-        "input":{"wallet_address":wallet,"cursor":cursor},
-        "output":GetPortfolio::run(
-            &continuation_app,
-            serde_json::from_value(json!({"wallet_address":wallet,"cursor":cursor})).unwrap(),
-            ctx("hoodit_get_portfolio"),
-        ).unwrap()
-    });
-    assert_eq!(continuation["output"]["status"], "partial");
-    assert_eq!(continuation["output"]["data"]["native_included"], false);
-    assert_eq!(continuation["output"]["data"]["summary"]["scope"], "page");
-    cases.push(continuation);
-    let null_string_cursor = json!({
-        "tool":"hoodit_get_portfolio",
-        "input":{"wallet_address":wallet,"cursor":"null"},
-        "output":GetPortfolio::run(
-            &app,
-            serde_json::from_value(json!({"wallet_address":wallet,"cursor":"null"})).unwrap(),
-            ctx("hoodit_get_portfolio"),
-        ).unwrap()
-    });
-    assert_eq!(null_string_cursor["output"]["status"], "ok");
-    assert_eq!(
-        null_string_cursor["output"]["data"]["native_included"],
-        true
-    );
-    cases.push(null_string_cursor);
-    let wrong_wallet_cursor = URL_SAFE_NO_PAD.encode(
-        serde_json::to_vec(&json!({
-            "v":1,"chain":4663,
-            "wallet":"0x5555555555555555555555555555555555555555",
-            "hop":1,
-            "next":{"id":7,"value":"1000000000000000000","fiat_value":null,"items_count":50}
-        }))
-        .unwrap(),
-    );
-    let wrong_wallet = json!({
-        "tool":"hoodit_get_portfolio",
-        "input":{"wallet_address":wallet,"cursor":wrong_wallet_cursor},
-        "output":GetPortfolio::run(
-            &app,
-            serde_json::from_value(json!({"wallet_address":wallet,"cursor":wrong_wallet_cursor})).unwrap(),
-            ctx("hoodit_get_portfolio"),
-        ).unwrap()
-    });
-    assert_eq!(wrong_wallet["output"]["status"], "error");
-    assert_eq!(wrong_wallet["output"]["error"]["code"], "INVALID_ARGUMENT");
-    cases.push(wrong_wallet);
-    let native_app = mock_app();
-    let native = json!({
-        "tool":"hoodit_get_holding",
-        "input":{"wallet_address":wallet,"token":"native","include_quote":false},
-        "output":GetHolding::run(
-            &native_app,
-            serde_json::from_value(json!({"wallet_address":wallet,"token":"native","include_quote":false})).unwrap(),
-            ctx("hoodit_get_holding"),
-        ).unwrap()
-    });
-    assert_eq!(
-        native["output"]["data"]["holding"]["token"]["kind"],
-        "native"
-    );
-    cases.push(native);
-    let unknown_decimals_token = "0x4444444444444444444444444444444444444444";
-    let unknown_decimals_app = mock_app();
-    let unknown_decimals = json!({
-        "tool":"hoodit_get_holding",
-        "input":{"wallet_address":wallet,"token":unknown_decimals_token,"include_quote":false},
-        "output":GetHolding::run(
-            &unknown_decimals_app,
-            serde_json::from_value(json!({"wallet_address":wallet,"token":unknown_decimals_token,"include_quote":false})).unwrap(),
-            ctx("hoodit_get_holding"),
-        ).unwrap()
-    });
-    assert_eq!(unknown_decimals["output"]["status"], "partial");
-    assert_eq!(
-        unknown_decimals["output"]["data"]["holding"]["valuation"]["reason"],
-        "unknown_decimals"
-    );
-    cases.push(unknown_decimals);
-    let invalid_argument = json!({
-        "tool":"hoodit_get_holding",
-        "output":GetHolding::run(
-            &app,
-            serde_json::from_value(json!({"wallet_address":"not-an-address","token":token})).unwrap(),
-            ctx("hoodit_get_holding"),
-        ).unwrap()
-    });
-    assert_eq!(invalid_argument["output"]["status"], "error");
-    assert_eq!(
-        invalid_argument["output"]["error"]["code"],
+        missing_amount["output"]["error"]["code"],
         "INVALID_ARGUMENT"
     );
-    cases.push(invalid_argument);
+    cases.push(missing_amount);
+    let too_precise = json!({
+        "tool":"hoodit_check_exit",
+        "output":CheckExit::run(
+            &app,
+            serde_json::from_value(json!({"token":token,"mode":"round_trip","eth_amount":"0.0000000000000000001"})).unwrap(),
+            ctx("hoodit_check_exit"),
+        ).unwrap()
+    });
+    assert_eq!(too_precise["output"]["error"]["code"], "INVALID_ARGUMENT");
+    cases.push(too_precise);
     if let Some(directory) = std::env::var_os("HOODIT_CONTRACT_FIXTURE_DIR") {
         let directory = PathBuf::from(directory);
         fs::create_dir_all(&directory).unwrap();

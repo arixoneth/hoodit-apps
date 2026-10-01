@@ -9,7 +9,7 @@
         "query": "WAVE"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "query": "WAVE",
@@ -63,7 +63,7 @@
         "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": {
@@ -241,6 +241,13 @@
               ]
             },
             "prices_executable": false
+          },
+          "lifecycle": {
+            "state": "not_reported",
+            "graduation_pct": null,
+            "graduated_at": null,
+            "destination_pool_id": null,
+            "source": "geckoterminal"
           }
         },
         "meta": {
@@ -266,7 +273,7 @@
         "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398",
@@ -386,7 +393,7 @@
         "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398",
@@ -514,7 +521,7 @@
         "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": "0x0d59e266304dee1d75ac34fa01986a53b8097398",
@@ -533,7 +540,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:1",
@@ -544,7 +553,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:2",
@@ -555,7 +566,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:3",
@@ -566,7 +579,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:4",
@@ -577,7 +592,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:5",
@@ -588,7 +605,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:6",
@@ -599,7 +618,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             },
             {
               "id": "fixture:7",
@@ -610,7 +631,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.014",
-              "volume_usd": "150"
+              "volume_usd": "150",
+              "block_number": null,
+              "sender": null
             }
           ],
           "coverage": {
@@ -619,6 +642,12 @@
             "provider_trade_cap": 300,
             "returned": 8,
             "complete_history": false
+          },
+          "summary": {
+            "distinct_senders": 0,
+            "top_buyers": [],
+            "top_sellers": [],
+            "sender_scope": "transaction_sender_may_be_router_or_executor"
           }
         },
         "meta": {
@@ -641,7 +670,7 @@
     {
       "tool": "hoodit_discover_pools",
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "feed": "trending",
@@ -759,7 +788,7 @@
     {
       "tool": "hoodit_get_market_options",
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "network": {

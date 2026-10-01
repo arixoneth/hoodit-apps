@@ -16,13 +16,6 @@ pub fn address(value: &str) -> Result<String, String> {
     }
     Ok(value.to_ascii_lowercase())
 }
-pub fn token_id(value: &str) -> Result<String, String> {
-    if value.eq_ignore_ascii_case("native") {
-        Ok("native".into())
-    } else {
-        address(value)
-    }
-}
 pub fn decimal(value: &str) -> Result<String, String> {
     let v = value.trim();
     let mut parts = v.split('.');
@@ -87,7 +80,7 @@ fn envelope(
     warnings: Vec<Value>,
     error: Option<Value>,
 ) -> Value {
-    json!({"schema_version":"1.3.0","status":status,"data":data,"meta":meta(sources,warnings),"error":error})
+    json!({"schema_version":"1.4.0","status":status,"data":data,"meta":meta(sources,warnings),"error":error})
 }
 pub fn token(
     id: &str,

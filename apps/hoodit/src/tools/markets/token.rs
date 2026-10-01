@@ -1,5 +1,8 @@
 use super::{
-    normalization::{invalid_argument, normalize_pool_id, resolve_pool, response_rows},
+    normalization::{
+        invalid_argument, lifecycle, normalize_pool_id, preferred_pool_ids, resolve_pool,
+        response_rows,
+    },
     security::{normalize_liquidity_security, normalize_security},
 };
 use crate::{
@@ -57,9 +60,9 @@ impl DynAomiTool for GetToken {
     type App = HooditApp;
     type Args = TokenArgs;
     const NAME: &'static str = "hoodit_get_token";
-    const DESCRIPTION: &'static str = "Read market, selected-pool, token-security, and ownership observations for one exact Robinhood Chain ERC-20 contract. Requires a 0x contract address, not a symbol; use hoodit_search_tokens first when identity is ambiguous. Provider facts remain source-labelled and are not an executable quote or a Hoodit safety score.";
+    const DESCRIPTION: &'static str = "Read market, launchpad lifecycle (bonding curve progress or graduation), selected-pool, token-security, and ownership observations for one exact Robinhood Chain ERC-20 contract. A graduated token defaults to its destination pool. Requires a 0x contract address, not a symbol; use hoodit_search_tokens first when identity is ambiguous. Provider facts remain source-labelled and are not an executable quote or a Hoodit safety score.";
 
-    fn run(app: &HooditApp, args: TokenArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: TokenArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = invalid_argument!(model::address(&args.token));
         let explicit_pool_id =
             invalid_argument!(args.pool_id.as_deref().map(normalize_pool_id).transpose());
@@ -72,7 +75,7 @@ impl DynAomiTool for GetToken {
             ));
         }
         let runtime = app.runtime()?;
-        let gecko = Gecko::new(&runtime);
+        let gecko = Gecko::new(&runtime, &ctx);
         let mut read = ReadContext::markets(args.refresh.unwrap_or(false));
         let token_response = match gecko.token(&token, &mut read) {
             Ok(response) => response,
@@ -91,20 +94,26 @@ impl DynAomiTool for GetToken {
             .unwrap_or(json!({}));
         let token_details = token_from_resource(&token_resource);
         let mut warnings = vec![];
-        let top_pool_ids = model::get(&token_resource, &["relationships", "top_pools", "data"])
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|pool| model::string(pool, &["id"]))
-            .map(|id| id.strip_prefix("robinhood_").unwrap_or(&id).to_string())
-            .collect::<Vec<_>>();
-        let automatic_pool_id = top_pool_ids.first().map(String::as_str);
-        let selected_pool = match resolve_pool(
-            &gecko,
-            &token,
-            explicit_pool_id.as_deref().or(automatic_pool_id),
-            &mut read,
-        ) {
+        let lifecycle = lifecycle(&token_resource);
+        let automatic_pool_ids = preferred_pool_ids(&token_resource);
+        let mut selection = match explicit_pool_id.as_deref() {
+            Some(pool_id) => resolve_pool(&gecko, &token, Some(pool_id), &mut read),
+            None => match automatic_pool_ids.first() {
+                Some(pool_id) => resolve_pool(&gecko, &token, Some(pool_id), &mut read),
+                None => resolve_pool(&gecko, &token, None, &mut read),
+            },
+        };
+        if explicit_pool_id.is_none()
+            && let (Err(error), Some(fallback)) = (&selection, automatic_pool_ids.get(1))
+            && matches!(error.code, "POOL_NOT_FOUND" | "TOKEN_NOT_IN_POOL")
+        {
+            warnings.push(model::warning(
+                "METADATA_UNAVAILABLE",
+                "The graduated destination pool could not be read; the indexed top pool was used instead",
+            ));
+            selection = resolve_pool(&gecko, &token, Some(fallback), &mut read);
+        }
+        let selected_pool = match selection {
             Ok((pool, _)) => Some(pool),
             Err(error) if explicit_pool_id.is_none() => {
                 warnings.push(model::warning(
@@ -218,7 +227,7 @@ impl DynAomiTool for GetToken {
         let liquidity_security =
             normalize_liquidity_security(&token, selected_pool_id.as_deref(), goplus.as_ref());
         Ok(model::ok(
-            json!({"token":token_details,"price_usd":model::string(&attributes,&["price_usd"]),"market_cap_usd":model::string(&attributes,&["market_cap_usd"]),"fdv_usd":model::string(&attributes,&["fdv_usd"]),"volume_24h_usd":model::string(&attributes,&["volume_usd","h24"]),"selected_pool":selected_pool,"selected_token_price_usd":selected_token_price_usd,"other_pools":other_pools,"metadata":metadata,"security":security,"ownership":ownership,"liquidity_security":liquidity_security,"community":community,"coverage":{"market":"token_and_selected_pool","other_pools_returned":other_pools.len(),"security":security_coverage,"prices_executable":false}}),
+            json!({"token":token_details,"lifecycle":lifecycle,"price_usd":model::string(&attributes,&["price_usd"]),"market_cap_usd":model::string(&attributes,&["market_cap_usd"]),"fdv_usd":model::string(&attributes,&["fdv_usd"]),"volume_24h_usd":model::string(&attributes,&["volume_usd","h24"]),"selected_pool":selected_pool,"selected_token_price_usd":selected_token_price_usd,"other_pools":other_pools,"metadata":metadata,"security":security,"ownership":ownership,"liquidity_security":liquidity_security,"community":community,"coverage":{"market":"token_and_selected_pool","other_pools_returned":other_pools.len(),"security":security_coverage,"prices_executable":false}}),
             read.sources,
             {
                 warnings.extend(read.warnings);

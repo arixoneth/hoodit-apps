@@ -14,7 +14,7 @@ pub struct ProviderOrigins {
     pub gecko: String,
     pub goplus: String,
     pub coingecko: String,
-    pub blockscout: String,
+    pub coingecko_pro: String,
     pub lifi: String,
 }
 impl Default for ProviderOrigins {
@@ -23,7 +23,7 @@ impl Default for ProviderOrigins {
             gecko: "https://api.geckoterminal.com/api/v2".into(),
             goplus: "https://api.gopluslabs.io/api/v1".into(),
             coingecko: "https://api.coingecko.com/api/v3".into(),
-            blockscout: "https://api.blockscout.com/4663".into(),
+            coingecko_pro: "https://pro-api.coingecko.com/api/v3".into(),
             lifi: "https://li.quest/v1".into(),
         }
     }
@@ -99,10 +99,12 @@ impl Runtime {
     }
     pub(crate) fn spend_rate(&self, provider: &str, credential: Option<&str>) -> Option<Duration> {
         let (limit, window) = match provider {
-            "blockscout" => (5, Duration::from_secs(1)),
+            "geckoterminal" if credential.is_some_and(|key| key.starts_with("pro:")) => {
+                (250, Duration::from_secs(60))
+            }
+            "geckoterminal" if credential.is_some() => (30, Duration::from_secs(60)),
             "geckoterminal" => (10, Duration::from_secs(60)),
             "goplus" => (30, Duration::from_secs(60)),
-            "coingecko" => (10, Duration::from_secs(60)),
             "lifi" if credential.is_some() => (200, Duration::from_secs(7200)),
             "lifi" => (75, Duration::from_secs(7200)),
             _ => return None,
@@ -149,8 +151,11 @@ impl ReadContext {
     pub fn markets(refresh: bool) -> Self {
         Self::new(Duration::from_secs(15), refresh, 0)
     }
-    pub fn portfolio(refresh: bool) -> Self {
-        Self::new(Duration::from_secs(30), refresh, 20)
+    /// Exit checks: one token read plus at most a buy and a sell quote.
+    pub fn exit(refresh: bool) -> Self {
+        let mut read = Self::new(Duration::from_secs(25), refresh, 2);
+        read.budgets.insert("geckoterminal", 2);
+        read
     }
     fn new(duration: Duration, refresh: bool, lifi_budget: u16) -> Self {
         Self {
@@ -158,13 +163,7 @@ impl ReadContext {
             refresh,
             sources: vec![],
             warnings: vec![],
-            budgets: HashMap::from([
-                ("geckoterminal", 10),
-                ("goplus", 10),
-                ("coingecko", 2),
-                ("blockscout", 25),
-                ("lifi", lifi_budget),
-            ]),
+            budgets: HashMap::from([("geckoterminal", 10), ("goplus", 10), ("lifi", lifi_budget)]),
         }
     }
     pub fn remaining(&self) -> Option<Duration> {
@@ -213,7 +212,7 @@ impl HooditApp {
 fn build_runtime() -> Result<Arc<Runtime>, String> {
     let mut headers = HeaderMap::new();
     headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-    headers.insert(USER_AGENT, HeaderValue::from_static("hoodit/1.3"));
+    headers.insert(USER_AGENT, HeaderValue::from_static("hoodit/1.4"));
     Client::builder()
         .connect_timeout(Duration::from_secs(3))
         .timeout(Duration::from_secs(10))
@@ -244,15 +243,15 @@ mod tests {
     #[test]
     fn shared_rate_limits_are_credential_scoped() {
         let runtime = Runtime::fixture(Client::new(), ProviderOrigins::default());
-        for _ in 0..5 {
-            assert!(runtime.spend_rate("blockscout", Some("first")).is_none());
+        for _ in 0..30 {
+            assert!(runtime.spend_rate("goplus", Some("first")).is_none());
         }
-        assert!(runtime.spend_rate("blockscout", Some("first")).is_some());
-        assert!(runtime.spend_rate("blockscout", Some("second")).is_none());
+        assert!(runtime.spend_rate("goplus", Some("first")).is_some());
+        assert!(runtime.spend_rate("goplus", Some("second")).is_none());
         for index in 0..300 {
             assert!(
                 runtime
-                    .spend_rate("blockscout", Some(&format!("scope-{index}")))
+                    .spend_rate("goplus", Some(&format!("scope-{index}")))
                     .is_none()
             );
         }
@@ -261,8 +260,8 @@ mod tests {
 
     #[test]
     fn operation_budget_counts_attempts() {
-        let mut read = ReadContext::portfolio(false);
-        for _ in 0..20 {
+        let mut read = ReadContext::exit(false);
+        for _ in 0..2 {
             assert!(read.spend("lifi"));
         }
         assert!(!read.spend("lifi"));

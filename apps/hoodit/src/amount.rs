@@ -1,6 +1,5 @@
 use num_bigint::BigUint;
-use num_integer::Integer;
-use num_traits::{One, Zero};
+use num_traits::Zero;
 use std::str::FromStr;
 
 pub fn atomic(value: &str) -> Result<BigUint, String> {
@@ -17,6 +16,20 @@ pub fn atomic(value: &str) -> Result<BigUint, String> {
         return Err("atomic amount exceeds uint256".into());
     }
     Ok(value)
+}
+/// Exact conversion of a whole-unit decimal string into atomic units. More
+/// fractional digits than the token supports is an error, never a rounding.
+pub fn from_decimal(value: &str, decimals: u8) -> Result<BigUint, String> {
+    let value = crate::model::decimal(value)?;
+    let (whole, fractional) = value.split_once('.').unwrap_or((&value, ""));
+    if fractional.len() > decimals as usize {
+        return Err(format!(
+            "amount has more than {decimals} fractional digits for this token"
+        ));
+    }
+    let digits = format!("{whole}{fractional:0<width$}", width = decimals as usize);
+    let digits = digits.trim_start_matches('0');
+    atomic(if digits.is_empty() { "0" } else { digits })
 }
 pub fn fraction(value: &BigUint, bps: u16) -> BigUint {
     value * BigUint::from(bps) / BigUint::from(10_000u16)
@@ -36,73 +49,39 @@ pub fn format(value: &BigUint, decimals: u8) -> String {
         .to_string();
     format!("{whole}.{frac}")
 }
-pub fn extrapolate(
-    balance: &BigUint,
-    input: &BigUint,
-    output: &BigUint,
-    input_decimals: u8,
-    output_decimals: u8,
-) -> Option<(String, String)> {
-    if input.is_zero() {
-        return None;
-    }
-    let ten = BigUint::from(10u8);
-    let unit_num = output * ten.pow(input_decimals as u32);
-    let unit_den = input * ten.pow(output_decimals as u32);
-    let value_num = output * balance;
-    let value_den = input * ten.pow(output_decimals as u32);
-    Some((
-        ratio_decimal(&unit_num, &unit_den, 36),
-        ratio_decimal(&value_num, &value_den, 36),
-    ))
-}
-fn ratio_decimal(num: &BigUint, den: &BigUint, places: u32) -> String {
-    let scale = BigUint::from(10u8).pow(places);
-    let (mut rounded, remainder) = (num * &scale).div_rem(den);
-    let twice = &remainder << 1usize;
-    if twice > *den || (twice == *den && (&rounded & BigUint::one()) == BigUint::one()) {
-        rounded += BigUint::one();
-    }
-    format(&rounded, places as u8)
-}
 #[cfg(test)]
 pub fn max_uint256() -> BigUint {
+    use num_traits::One;
     (BigUint::one() << 256usize) - BigUint::one()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use num_traits::One;
     #[test]
     fn exact_amounts() {
         assert_eq!(atomic(&max_uint256().to_string()).unwrap(), max_uint256());
         assert!(atomic(&(BigUint::one() << 256usize).to_string()).is_err());
         assert_eq!(format(&atomic("1234500").unwrap(), 6), "1.2345");
         assert_eq!(fraction(&atomic("999").unwrap(), 5000).to_string(), "499");
-    }
-    #[test]
-    fn quote_math() {
-        let (unit, value) = extrapolate(
-            &atomic("10000000000000000000000").unwrap(),
-            &atomic("100000000000000000000").unwrap(),
-            &atomic("1000000").unwrap(),
-            18,
-            6,
-        )
-        .unwrap();
-        assert_eq!((unit.as_str(), value.as_str()), ("0.01", "100"));
-    }
-    #[test]
-    fn rounds_rational_half_even_and_values_independently() {
-        assert_eq!(
-            ratio_decimal(&BigUint::from(1u8), &BigUint::from(8u8), 2),
-            "0.12"
-        );
-        assert_eq!(
-            ratio_decimal(&BigUint::from(3u8), &BigUint::from(8u8), 2),
-            "0.38"
-        );
         let max = max_uint256();
         assert_eq!(fraction(&max, 10_000), max);
+    }
+    #[test]
+    fn decimal_amounts_convert_exactly() {
+        assert_eq!(
+            from_decimal("0.05", 18).unwrap().to_string(),
+            "50000000000000000"
+        );
+        assert_eq!(
+            from_decimal("2000000", 18).unwrap().to_string(),
+            "2000000000000000000000000"
+        );
+        assert_eq!(from_decimal("1.5", 6).unwrap().to_string(), "1500000");
+        assert_eq!(from_decimal("0", 6).unwrap().to_string(), "0");
+        assert!(from_decimal("0.1234567", 6).is_err());
+        assert!(from_decimal("-1", 6).is_err());
+        assert!(from_decimal("1e5", 6).is_err());
     }
 }

@@ -110,18 +110,17 @@ def main() -> None:
         check(name, "output", bad, valid=False)
 
     token = "0x" + "1" * 40
-    wallet = "0x" + "3" * 40
     for name, invalid_input in [
         ("hoodit_get_candles", {"token": token, "interval": "1s"}),
         ("hoodit_get_candles", {"token": token, "limit": 1001}),
         ("hoodit_get_candles", {"token": token, "limit": 0}),
         ("hoodit_get_token", {"token": "NVDA"}),
         ("hoodit_get_token", {"token": "0x" + "g" * 40}),
-        ("hoodit_get_holding", {"wallet_address": wallet, "token": token, "quote_balance_bps": 10001}),
-        ("hoodit_get_holding", {"wallet_address": wallet, "token": token, "quote_balance_bps": 0}),
-        ("hoodit_get_portfolio", {"wallet_address": wallet, "page": 2}),
-        ("hoodit_get_portfolio", {"wallet_address": wallet, "page_size": 20}),
-        ("hoodit_get_portfolio", {"wallet_address": wallet, "cursor": "contains spaces"}),
+        ("hoodit_check_exit", {"token": token, "amount": "1", "fraction_bps": 10001}),
+        ("hoodit_check_exit", {"token": token, "amount": "1", "fraction_bps": 0}),
+        ("hoodit_check_exit", {"token": token, "amount": "1e5"}),
+        ("hoodit_check_exit", {"token": token, "mode": "buy"}),
+        ("hoodit_check_exit", {"token": token, "wallet_address": "me"}),
         ("hoodit_discover_pools", {"min_liquidity_usd": 100}),
         ("hoodit_discover_pools", {"min_liquidity_usd": "1e4"}),
         ("hoodit_search_tokens", {"query": "coin", "page": 11}),
@@ -129,37 +128,38 @@ def main() -> None:
     ]:
         check(name, "input", invalid_input, valid=False)
 
-    # Valuation states have explicit nullability, not just an unconstrained enum.
-    name = "hoodit_get_holding"
+    # Lifecycle states keep curve and graduation evidence apart.
+    name = "hoodit_get_token"
     source = successes[name]["output"]
-    for value in [
-        {"status": "unpriced", "unit_price_usdg": None, "value_usdg": None, "reason": "no_route", "quote": None},
-        {"status": "not_requested", "unit_price_usdg": None, "value_usdg": None, "reason": None, "quote": None},
-        {"status": "zero_balance", "unit_price_usdg": None, "value_usdg": "0", "reason": None, "quote": None},
-        {"status": "quote_currency", "unit_price_usdg": "1", "value_usdg": "100", "reason": None, "quote": None},
-        {"status": "unpriced", "unit_price_usdg": None, "value_usdg": None, "reason": "budget_exhausted", "quote": None},
-        {"status": "unpriced", "unit_price_usdg": None, "value_usdg": None, "reason": "deadline_exceeded", "quote": None},
+    for lifecycle, valid in [
+        ({"state": "graduated", "graduation_pct": "100", "graduated_at": "2026-09-07T16:17:38Z", "destination_pool_id": "0x" + "b" * 64, "source": "geckoterminal"}, True),
+        ({"state": "not_reported", "graduation_pct": None, "graduated_at": None, "destination_pool_id": None, "source": "geckoterminal"}, True),
+        ({"state": "bonding_curve", "graduation_pct": "50", "graduated_at": None, "destination_pool_id": "0x" + "b" * 64, "source": "geckoterminal"}, False),
+        ({"state": "not_reported", "graduation_pct": "0", "graduated_at": "2026-09-07T16:17:38Z", "destination_pool_id": None, "source": "geckoterminal"}, False),
     ]:
         result = copy.deepcopy(source)
-        result["data"]["holding"]["valuation"] = value
-        # Cross-field amount consistency is an implementation test, not a schema assertion here.
-        check(name, "output", result, valid=True)
-        invalid = copy.deepcopy(result)
-        if value["status"] == "unpriced":
-            invalid["data"]["holding"]["valuation"]["reason"] = None
-        else:
-            invalid["data"]["holding"]["valuation"]["quote"] = source["data"]["holding"]["valuation"]["quote"]
-        check(name, "output", invalid, valid=False)
+        result["data"]["lifecycle"] = lifecycle
+        check(name, "output", result, valid=valid)
 
+    # Exit checks are never executable and a missing route carries no amounts.
+    name = "hoodit_check_exit"
+    source = next(
+        case["output"]
+        for case in fixtures["cases"]
+        if case["tool"] == name and case["output"]["status"] == "ok" and case["output"]["data"]["mode"] == "sell"
+    )
     invalid = copy.deepcopy(source)
-    invalid["data"]["holding"]["valuation"]["quote"]["preflighted"] = True
+    invalid["data"]["coverage"]["executable"] = True
     check(name, "output", invalid, valid=False)
     invalid = copy.deepcopy(source)
-    invalid["data"]["holding"]["token"]["id"] = "native"
-    check(name, "output", invalid, valid=False)  # ERC-20 identity cannot be native.
-    invalid = copy.deepcopy(source)
-    invalid["data"]["holding"]["balance"]["atomic"] = 100
+    invalid["data"]["sell"]["route_found"] = False
     check(name, "output", invalid, valid=False)
+    invalid = copy.deepcopy(source)
+    invalid["data"]["sell"]["transactionRequest"] = {"data": "0x"}
+    check(name, "output", invalid, valid=False)
+    invalid = copy.deepcopy(source)
+    invalid["data"]["buy"] = copy.deepcopy(source["data"]["sell"])
+    check(name, "output", invalid, valid=False)  # A sell-mode check has no buy leg.
 
     # Documentation consistency, without asserting any live capability.
     plan = (root / "v1-plan.md").read_text()
@@ -171,20 +171,12 @@ def main() -> None:
         if name not in plan:
             raise AssertionError(f"Undocumented tool: {name}")
     serialized = json.dumps(bundle).lower()
-    for stale in ('etherscan', 'plan_required'):
+    for stale in ('etherscan', 'plan_required', 'blockscout'):
         if stale in serialized:
             raise AssertionError(f"Superseded contract term remains: {stale}")
-    portfolio_properties = definitions["HooditGetPortfolioInput"]["properties"]
-    if "page" in portfolio_properties or "page_size" in portfolio_properties:
-        raise AssertionError("Portfolio input still exposes numbered pagination")
-    if definitions["HooditGetPortfolioInput"]["properties"]["include_quotes"].get("default") is not False:
-        raise AssertionError("Portfolio valuation must be opt-in")
-    check(
-        "hoodit_get_portfolio",
-        "input",
-        {"wallet_address": wallet, "cursor": None},
-        valid=True,
-    )
+    for removed in ("HooditGetPortfolioInput", "HooditGetHoldingInput"):
+        if removed in definitions:
+            raise AssertionError(f"Removed wallet tool contract remains: {removed}")
 
     synthetic_assertions = assertions
     implementation_assertions = 0

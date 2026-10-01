@@ -1,9 +1,23 @@
 # Hoodit v1.2.0 implementation contract and Rust structure
 
-The public tool surface is exactly `hoodit_search_tokens`,
+As of 1.4.0 the public tool surface is exactly `hoodit_search_tokens`,
 `hoodit_discover_pools`, `hoodit_get_token`, `hoodit_get_token_pools`,
-`hoodit_get_market_options`, `hoodit_get_candles`, `hoodit_get_trades`,
-`hoodit_get_portfolio`, and `hoodit_get_holding`.
+`hoodit_get_market_options`, `hoodit_get_candles`, `hoodit_get_trades`, and
+`hoodit_check_exit`. The 1.2 wallet tools `hoodit_get_portfolio` and
+`hoodit_get_holding` were removed in 1.4.0 because the Aomi host's core
+`get_erc20_holdings` now covers Robinhood Chain balances; the sections below
+that describe them are historical.
+
+**1.4.0 amendment:** `hoodit_get_token` reports launchpad lifecycle
+(`bonding_curve`, `graduated`, `not_reported`, `unknown`) from GeckoTerminal's
+`launchpad_details` and defaults a graduated token to its destination pool;
+candles and trades follow the same default. Discovery results carry the same
+lifecycle from one batched token read. `hoodit_get_trades` keeps each trade's
+sending wallet and block and ranks the largest senders in the sample, labelled
+as transaction senders that may be routers. `hoodit_check_exit` returns a
+read-only LI.FI sell quote for an exact amount or basis-point fraction, or a
+buy-then-sell round trip for an ETH amount. Market reads can use an optional
+operator-managed CoinGecko key for a higher onchain-API allowance.
 
 Originally reviewed 2026-09-17 against Hoodit commit `30f8347b2e1d08732528eb417d49b3e918b8575f` and the supplied `hoodit-v1-plan.zip`.
 

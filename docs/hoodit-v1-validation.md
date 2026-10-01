@@ -88,3 +88,35 @@ no-tool chat, and a read-only Hoodit tool turn on the deployed application.
 Record the deployment id, release tag, active application id, artifact digest,
 and smoke evidence here only after those checks complete. A candidate pull
 request or initial HTTP 200 is insufficient by itself.
+
+## 1.4.0 source checks (2026-10-01)
+
+Hoodit 1.4.0 removes the portfolio skill, its two wallet tools, and the
+Blockscout provider, because the Aomi host's core `get_erc20_holdings` covers
+Robinhood Chain balances. It adds token launchpad lifecycle, trade senders,
+and the read-only `hoodit_check_exit` tool.
+
+Live read-only probes on 2026-10-01 informed the change:
+
+- GeckoTerminal's token resource reports `launchpad_details`. PARLEY reported
+  `completed: true` (graduated 2026-09-07) with its destination pool, and
+  DOTARENA reported 50.26% curve progress before graduating the same day.
+  The batched `tokens/multi` endpoint returns the same field.
+- GeckoTerminal lists `pons-v2` curve pools and `pons-v2-dex` graduated pools.
+- Trade rows include `tx_from_address` and `block_number`.
+- LI.FI returned a buy quote (Fly) and a sell quote (KyberSwap) for a
+  mid-curve Pons token, and a KyberSwap quote for graduated PARLEY, using a
+  placeholder sender. These were quotes only; nothing was executed.
+
+A staging chat on application `2937810` with GPT-6 Luna (before 1.4) showed
+the gaps this release targets: graduation was inferred from a DEX name, exit
+size was estimated from pool liquidity rather than quoted, the wallet answer
+used Hoodit's portfolio tool instead of the host's and valued a spam
+"Ethereum" ERC-20 at about $174k, and most chart and trade reads were rate
+limited by the shared public GeckoTerminal allowance. Three of six turns
+also ended in a platform-level "app hit an error" failure that did not
+reproduce on rerun.
+
+Staging requires `aomi-sdk` 5.1.0 while production requires 5.1.1; this
+source pins 5.1.1. Deployment and a post-deploy chat for 1.4.0 are not yet
+recorded.

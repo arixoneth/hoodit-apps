@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
 READ_TOOLS = {
     "hoodit_search_tokens", "hoodit_discover_pools", "hoodit_get_market_options",
     "hoodit_get_token", "hoodit_get_token_pools", "hoodit_get_candles", "hoodit_get_trades",
+    "hoodit_check_exit",
 }
 SKILLS_TOKEN_BUDGET = 4000
 DIMENSIONS = ["grounding", "selection", "chart_reasoning", "usefulness", "voice"]

@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:hoodit:tool-contracts:1.3.0",
   "title": "Hoodit v1 read-tool contracts",
-  "description": "Amended 2026-09-20 contract for nine read-only Hoodit tools covering paginated market screening, token security and ownership, pool comparison, wallet exposure, and exact sizing.",
-  "x-contract-version": "1.3.0",
+  "description": "Amended 2026-10-01 contract for eight read-only Hoodit tools covering paginated market screening, launchpad lifecycle, token security and ownership, pool comparison, public trades with their senders, and exact-size exit quotes.",
+  "x-contract-version": "1.4.0",
   "x-tools": [
     {
       "name": "hoodit_search_tokens",
@@ -36,7 +36,7 @@
     {
       "name": "hoodit_get_token",
       "skill": "hoodit/markets",
-      "description": "Inspect an exact Robinhood ERC-20: token mark, capitalization, volume, selected-pool liquidity/activity, and optional metadata. Not an executable quote.",
+      "description": "Inspect an exact Robinhood ERC-20: launchpad lifecycle (curve progress or graduation, defaulting to the destination pool), token mark, capitalization, volume, selected-pool liquidity/activity, and optional metadata. Not an executable quote.",
       "input_schema": {
         "$ref": "#/$defs/HooditGetTokenInput"
       },
@@ -92,7 +92,7 @@
     {
       "name": "hoodit_get_trades",
       "skill": "hoodit/markets",
-      "description": "Inspect recent public pool trades, oriented to the requested token. Free-provider window: at most the latest 300 trades in 24 hours; not personal trade history.",
+      "description": "Inspect recent public pool trades, oriented to the requested token. Free-provider window: at most the latest 300 trades in 24 hours; not personal trade history. Each trade keeps its sending wallet; the summary ranks the largest senders in the sample.",
       "input_schema": {
         "$ref": "#/$defs/HooditGetTradesInput"
       },
@@ -104,31 +104,17 @@
       }
     },
     {
-      "name": "hoodit_get_portfolio",
-      "skill": "hoodit/portfolio",
-      "description": "Read one wallet inventory page and optionally value its holdings with LI.FI sample sell quotes into USDG. Includes native ETH on page one; no cost basis or P&L.",
+      "name": "hoodit_check_exit",
+      "skill": "hoodit/markets",
+      "description": "Read-only LI.FI exit check: a sell quote for an exact token amount or basis-point fraction, or a buy-then-sell round trip for an ETH amount, with route, expected and minimum output, USD values, loss, gas, and fees. Never prepares, signs, or broadcasts.",
       "input_schema": {
-        "$ref": "#/$defs/HooditGetPortfolioInput"
+        "$ref": "#/$defs/HooditCheckExitInput"
       },
       "output_schema": {
-        "$ref": "#/$defs/HooditGetPortfolioOutput"
+        "$ref": "#/$defs/HooditCheckExitOutput"
       },
       "data_schema": {
-        "$ref": "#/$defs/HooditGetPortfolioData"
-      }
-    },
-    {
-      "name": "hoodit_get_holding",
-      "skill": "hoodit/portfolio",
-      "description": "Read an exact wallet holding and compute an integer-sized fraction for a possible sale. Optionally quote that fraction into USDG; 10000 bps quotes the whole holding. Does not stage or trade.",
-      "input_schema": {
-        "$ref": "#/$defs/HooditGetHoldingInput"
-      },
-      "output_schema": {
-        "$ref": "#/$defs/HooditGetHoldingOutput"
-      },
-      "data_schema": {
-        "$ref": "#/$defs/HooditGetHoldingData"
+        "$ref": "#/$defs/HooditCheckExitData"
       }
     }
   ],
@@ -215,60 +201,188 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "min": { "$ref": "#/$defs/Decimal" },
-        "max": { "$ref": "#/$defs/Decimal" }
+        "min": {
+          "$ref": "#/$defs/Decimal"
+        },
+        "max": {
+          "$ref": "#/$defs/Decimal"
+        }
       }
     },
     "SignedDecimalRange": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "min": { "$ref": "#/$defs/SignedDecimal" },
-        "max": { "$ref": "#/$defs/SignedDecimal" }
+        "min": {
+          "$ref": "#/$defs/SignedDecimal"
+        },
+        "max": {
+          "$ref": "#/$defs/SignedDecimal"
+        }
       }
     },
     "CountRange": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "min": { "type": "integer", "minimum": 0 },
-        "max": { "type": "integer", "minimum": 0 }
+        "min": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "DiscoveryFilters": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "dex_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 20 },
-        "paired_token_addresses": { "type": "array", "items": { "$ref": "#/$defs/Address" }, "maxItems": 20 },
-        "liquidity_usd": { "$ref": "#/$defs/DecimalRange" },
-        "volume_usd": { "$ref": "#/$defs/DecimalRange" },
-        "volume_window": { "enum": ["m5", "m15", "m30", "h1", "h6", "h24"] },
-        "fdv_usd": { "$ref": "#/$defs/DecimalRange" },
-        "market_cap_usd": { "$ref": "#/$defs/DecimalRange" },
-        "price_usd": { "$ref": "#/$defs/DecimalRange" },
-        "pool_age_hours": { "$ref": "#/$defs/CountRange" },
-        "price_change_pct": { "$ref": "#/$defs/SignedDecimalRange" },
-        "price_change_window": { "enum": ["m5", "m15", "m30", "h1", "h6", "h24"] },
-        "transactions": { "$ref": "#/$defs/CountRange" },
-        "buys": { "$ref": "#/$defs/CountRange" },
-        "sells": { "$ref": "#/$defs/CountRange" },
-        "buyers": { "$ref": "#/$defs/CountRange" },
-        "sellers": { "$ref": "#/$defs/CountRange" },
-        "activity_window": { "enum": ["m5", "m15", "m30", "h1", "h6", "h24"] },
-        "transactions_window": { "enum": ["m5", "m15", "m30", "h1", "h6", "h24"] },
-        "buys_window": { "enum": ["m5", "m15", "m30", "h1", "h6", "h24"] },
-        "sells_window": { "enum": ["m5", "m15", "m30", "h1", "h6", "h24"] },
-        "min_gt_score": { "$ref": "#/$defs/Decimal" },
-        "honeypot": { "enum": ["any", "exclude_flagged", "require_clear"] },
-        "max_buy_tax_pct": { "$ref": "#/$defs/Decimal" },
-        "max_sell_tax_pct": { "$ref": "#/$defs/Decimal" },
-        "require_gt_verified": { "type": "boolean" },
-        "require_open_source": { "type": "boolean" },
-        "holder_count": { "$ref": "#/$defs/CountRange" },
-        "top10_concentration_pct": { "$ref": "#/$defs/DecimalRange" },
-        "require_social_presence": { "type": "boolean" },
-        "require_coingecko_listed": { "type": "boolean" }
+        "dex_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20
+        },
+        "paired_token_addresses": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Address"
+          },
+          "maxItems": 20
+        },
+        "liquidity_usd": {
+          "$ref": "#/$defs/DecimalRange"
+        },
+        "volume_usd": {
+          "$ref": "#/$defs/DecimalRange"
+        },
+        "volume_window": {
+          "enum": [
+            "m5",
+            "m15",
+            "m30",
+            "h1",
+            "h6",
+            "h24"
+          ]
+        },
+        "fdv_usd": {
+          "$ref": "#/$defs/DecimalRange"
+        },
+        "market_cap_usd": {
+          "$ref": "#/$defs/DecimalRange"
+        },
+        "price_usd": {
+          "$ref": "#/$defs/DecimalRange"
+        },
+        "pool_age_hours": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "price_change_pct": {
+          "$ref": "#/$defs/SignedDecimalRange"
+        },
+        "price_change_window": {
+          "enum": [
+            "m5",
+            "m15",
+            "m30",
+            "h1",
+            "h6",
+            "h24"
+          ]
+        },
+        "transactions": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "buys": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "sells": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "buyers": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "sellers": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "activity_window": {
+          "enum": [
+            "m5",
+            "m15",
+            "m30",
+            "h1",
+            "h6",
+            "h24"
+          ]
+        },
+        "transactions_window": {
+          "enum": [
+            "m5",
+            "m15",
+            "m30",
+            "h1",
+            "h6",
+            "h24"
+          ]
+        },
+        "buys_window": {
+          "enum": [
+            "m5",
+            "m15",
+            "m30",
+            "h1",
+            "h6",
+            "h24"
+          ]
+        },
+        "sells_window": {
+          "enum": [
+            "m5",
+            "m15",
+            "m30",
+            "h1",
+            "h6",
+            "h24"
+          ]
+        },
+        "min_gt_score": {
+          "$ref": "#/$defs/Decimal"
+        },
+        "honeypot": {
+          "enum": [
+            "any",
+            "exclude_flagged",
+            "require_clear"
+          ]
+        },
+        "max_buy_tax_pct": {
+          "$ref": "#/$defs/Decimal"
+        },
+        "max_sell_tax_pct": {
+          "$ref": "#/$defs/Decimal"
+        },
+        "require_gt_verified": {
+          "type": "boolean"
+        },
+        "require_open_source": {
+          "type": "boolean"
+        },
+        "holder_count": {
+          "$ref": "#/$defs/CountRange"
+        },
+        "top10_concentration_pct": {
+          "$ref": "#/$defs/DecimalRange"
+        },
+        "require_social_presence": {
+          "type": "boolean"
+        },
+        "require_coingecko_listed": {
+          "type": "boolean"
+        }
       }
     },
     "Source": {
@@ -280,8 +394,6 @@
           "enum": [
             "geckoterminal",
             "goplus",
-            "coingecko",
-            "blockscout",
             "lifi",
             "hoodit"
           ]
@@ -1179,6 +1291,28 @@
               "type": "null"
             }
           ]
+        },
+        "block_number": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sender": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Address"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Transaction from-address; may be a router or executor rather than the trader."
         }
       },
       "required": [
@@ -1190,7 +1324,9 @@
         "counter_token",
         "counter_amount",
         "price_usd",
-        "volume_usd"
+        "volume_usd",
+        "block_number",
+        "sender"
       ]
     },
     "Amount": {
@@ -1214,387 +1350,6 @@
       "required": [
         "atomic",
         "formatted"
-      ]
-    },
-    "Quote": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "input_amount": {
-          "$ref": "#/$defs/Amount"
-        },
-        "expected_output": {
-          "$ref": "#/$defs/Amount"
-        },
-        "minimum_output": {
-          "$ref": "#/$defs/Amount"
-        },
-        "route_name": {
-          "anyOf": [
-            {
-              "type": "string",
-              "minLength": 0,
-              "maxLength": 160
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "gas_cost_usd": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "quoted_at": {
-          "$ref": "#/$defs/Time"
-        },
-        "slippage_bps": {
-          "const": 50
-        },
-        "preflighted": {
-          "const": false
-        }
-      },
-      "required": [
-        "input_amount",
-        "expected_output",
-        "minimum_output",
-        "route_name",
-        "gas_cost_usd",
-        "quoted_at",
-        "slippage_bps",
-        "preflighted"
-      ]
-    },
-    "Valuation": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "quoted",
-            "market",
-            "quote_currency",
-            "unpriced",
-            "not_requested",
-            "zero_balance"
-          ]
-        },
-        "currency": {
-          "type": ["string", "null"],
-          "enum": ["USD", "USDG", null]
-        },
-        "unit_price_usd": {
-          "anyOf": [
-            { "$ref": "#/$defs/Decimal" },
-            { "type": "null" }
-          ]
-        },
-        "value_usd": {
-          "anyOf": [
-            { "$ref": "#/$defs/Decimal" },
-            { "type": "null" }
-          ]
-        },
-        "unit_price_usdg": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "value_usdg": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "reason": {
-          "anyOf": [
-            {
-              "type": "string",
-              "enum": [
-                "no_route",
-                "quote_unavailable",
-                "rate_limited",
-                "unknown_decimals",
-                "rounds_to_zero",
-                "budget_exhausted",
-                "deadline_exceeded",
-                "not_indexed_or_unavailable"
-              ]
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "quote": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Quote"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "status",
-        "unit_price_usdg",
-        "value_usdg",
-        "reason",
-        "quote"
-      ],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "quoted"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "unit_price_usdg": {
-                "$ref": "#/$defs/Decimal"
-              },
-              "value_usdg": {
-                "$ref": "#/$defs/Decimal"
-              },
-              "reason": {
-                "type": "null"
-              },
-              "quote": {
-                "$ref": "#/$defs/Quote"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "quote_currency"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "unit_price_usdg": {
-                "const": "1"
-              },
-              "value_usdg": {
-                "$ref": "#/$defs/Decimal"
-              },
-              "reason": {
-                "type": "null"
-              },
-              "quote": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "zero_balance"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "unit_price_usdg": {
-                "type": "null"
-              },
-              "value_usdg": {
-                "const": "0"
-              },
-              "reason": {
-                "type": "null"
-              },
-              "quote": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "not_requested"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "unit_price_usdg": {
-                "type": "null"
-              },
-              "value_usdg": {
-                "type": "null"
-              },
-              "reason": {
-                "type": "null"
-              },
-              "quote": {
-                "type": "null"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "unpriced"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "unit_price_usdg": {
-                "type": "null"
-              },
-              "value_usdg": {
-                "type": "null"
-              },
-              "reason": {
-                "type": "string",
-                "enum": [
-                  "no_route",
-                  "quote_unavailable",
-                  "rate_limited",
-                  "unknown_decimals",
-                  "rounds_to_zero",
-                  "budget_exhausted",
-                  "deadline_exceeded",
-                  "not_indexed_or_unavailable"
-                ]
-              },
-              "quote": {
-                "type": "null"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "Holding": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "token": {
-          "$ref": "#/$defs/Token"
-        },
-        "balance": {
-          "$ref": "#/$defs/Amount"
-        },
-        "valuation": {
-          "$ref": "#/$defs/Valuation"
-        },
-        "allocation": {
-          "type": "object"
-        },
-        "security": {
-          "type": "object"
-        },
-        "ownership": {
-          "type": "object"
-        },
-        "security_coverage": {
-          "type": "object"
-        },
-        "liquidity_context": {
-          "type": ["object", "null"]
-        }
-      },
-      "required": [
-        "token",
-        "balance",
-        "valuation"
-      ]
-    },
-    "PortfolioSummary": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "scope": {
-          "type": "string",
-          "enum": [
-            "wallet",
-            "page"
-          ],
-          "description": "wallet only for a complete initial page with successful native read; otherwise page."
-        },
-        "holdings_count": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 51
-        },
-        "priced_count": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 51
-        },
-        "unpriced_count": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 51
-        },
-        "display_scope": { "type": "string" },
-        "filtered_out_count": { "type": "integer", "minimum": 0, "maximum": 51 },
-        "priced_value_usd": { "anyOf": [{ "$ref": "#/$defs/Decimal" }, { "type": "null" }] },
-        "total_value_usd": { "anyOf": [{ "$ref": "#/$defs/Decimal" }, { "type": "null" }] },
-        "allocation_denominator": { "type": "string" },
-        "top_exposures": { "type": "array", "items": { "type": "object" }, "maxItems": 5 },
-        "priced_value_usdg": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "total_value_usdg": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Decimal"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "scope",
-        "holdings_count",
-        "priced_count",
-        "unpriced_count",
-        "priced_value_usdg",
-        "total_value_usdg"
       ]
     },
     "HooditSearchTokensInput": {
@@ -1648,7 +1403,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "1.3.0"
+          "const": "1.4.0"
         },
         "status": {
           "type": "string",
@@ -1730,7 +1485,12 @@
           "default": "trending"
         },
         "source_feed": {
-          "enum": ["trending", "new", "top_volume", "top_activity"]
+          "enum": [
+            "trending",
+            "new",
+            "top_volume",
+            "top_activity"
+          ]
         },
         "duration": {
           "$ref": "#/$defs/Duration",
@@ -1750,15 +1510,72 @@
           "$ref": "#/$defs/Decimal",
           "default": "0"
         },
-        "filters": { "$ref": "#/$defs/DiscoveryFilters" },
-        "sort": { "enum": ["feed", "liquidity", "volume", "volume_24h", "transactions", "buys", "sells", "created_at", "price_change", "fdv", "market_cap", "price"], "default": "feed" },
-        "direction": { "enum": ["asc", "desc"], "default": "desc" },
-        "limit": { "type": "integer", "minimum": 1, "maximum": 20, "default": 10 },
-        "max_pages": { "type": "integer", "minimum": 1, "maximum": 3, "default": 1 },
-        "enrichment_limit": { "type": "integer", "minimum": 1, "maximum": 8, "default": 8 },
-        "deduplicate_tokens": { "type": "boolean", "default": false },
-        "cursor": { "anyOf": [{ "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "minLength": 1, "maxLength": 8192 }, { "type": "null" }] },
-        "refresh": { "type": "boolean", "default": false }
+        "filters": {
+          "$ref": "#/$defs/DiscoveryFilters"
+        },
+        "sort": {
+          "enum": [
+            "feed",
+            "liquidity",
+            "volume",
+            "volume_24h",
+            "transactions",
+            "buys",
+            "sells",
+            "created_at",
+            "price_change",
+            "fdv",
+            "market_cap",
+            "price"
+          ],
+          "default": "feed"
+        },
+        "direction": {
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "desc"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 10
+        },
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 3,
+          "default": 1
+        },
+        "enrichment_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8,
+          "default": 8
+        },
+        "deduplicate_tokens": {
+          "type": "boolean",
+          "default": false
+        },
+        "cursor": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "minLength": 1,
+              "maxLength": 8192
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        }
       },
       "required": []
     },
@@ -1770,7 +1587,12 @@
           "$ref": "#/$defs/Feed"
         },
         "source_feed": {
-          "enum": ["trending", "new", "top_volume", "top_activity"]
+          "enum": [
+            "trending",
+            "new",
+            "top_volume",
+            "top_activity"
+          ]
         },
         "duration": {
           "anyOf": [
@@ -1788,13 +1610,49 @@
         "min_volume_24h_usd": {
           "$ref": "#/$defs/Decimal"
         },
-        "filters": { "type": "object" },
-        "sort": { "enum": ["feed", "liquidity", "volume", "volume_24h", "transactions", "buys", "sells", "created_at", "price_change", "fdv", "market_cap", "price"] },
-        "direction": { "enum": ["asc", "desc"] },
+        "filters": {
+          "type": "object"
+        },
+        "sort": {
+          "enum": [
+            "feed",
+            "liquidity",
+            "volume",
+            "volume_24h",
+            "transactions",
+            "buys",
+            "sells",
+            "created_at",
+            "price_change",
+            "fdv",
+            "market_cap",
+            "price"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
         "pools": {
           "type": "array",
-          "items": { "type": "object" },
-          "maxItems": 20
+          "maxItems": 20,
+          "items": {
+            "type": "object",
+            "properties": {
+              "lifecycle": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Lifecycle"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
         },
         "pagination": {
           "type": "object"
@@ -1818,7 +1676,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "1.3.0"
+          "const": "1.4.0"
         },
         "status": {
           "type": "string",
@@ -1906,7 +1764,11 @@
           "default": false
         },
         "security": {
-          "enum": ["none", "summary", "full"],
+          "enum": [
+            "none",
+            "summary",
+            "full"
+          ],
           "default": "summary"
         },
         "include_holders": {
@@ -1991,7 +1853,9 @@
         },
         "other_pools": {
           "type": "array",
-          "items": { "type": "object" },
+          "items": {
+            "type": "object"
+          },
           "maxItems": 8
         },
         "metadata": {
@@ -2004,11 +1868,27 @@
             }
           ]
         },
-        "security": { "type": "object" },
-        "ownership": { "type": "object" },
-        "liquidity_security": { "type": "object" },
-        "community": { "type": ["object", "null"] },
-        "coverage": { "type": "object" }
+        "security": {
+          "type": "object"
+        },
+        "ownership": {
+          "type": "object"
+        },
+        "liquidity_security": {
+          "type": "object"
+        },
+        "community": {
+          "type": [
+            "object",
+            "null"
+          ]
+        },
+        "coverage": {
+          "type": "object"
+        },
+        "lifecycle": {
+          "$ref": "#/$defs/Lifecycle"
+        }
       },
       "required": [
         "token",
@@ -2019,7 +1899,8 @@
         "selected_pool",
         "selected_token_price_usd",
         "other_pools",
-        "metadata"
+        "metadata",
+        "lifecycle"
       ]
     },
     "HooditGetTokenOutput": {
@@ -2027,7 +1908,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "1.3.0"
+          "const": "1.4.0"
         },
         "status": {
           "type": "string",
@@ -2104,79 +1985,284 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "token": { "$ref": "#/$defs/Address" },
-        "dex_ids": { "type": "array", "items": { "type": "string" }, "maxItems": 20 },
-        "sort": { "enum": ["liquidity", "volume_24h", "created_at", "price"], "default": "liquidity" },
-        "direction": { "enum": ["asc", "desc"], "default": "desc" },
-        "page": { "type": "integer", "minimum": 1, "maximum": 10, "default": 1 },
-        "refresh": { "type": "boolean", "default": false }
+        "token": {
+          "$ref": "#/$defs/Address"
+        },
+        "dex_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 20
+        },
+        "sort": {
+          "enum": [
+            "liquidity",
+            "volume_24h",
+            "created_at",
+            "price"
+          ],
+          "default": "liquidity"
+        },
+        "direction": {
+          "enum": [
+            "asc",
+            "desc"
+          ],
+          "default": "desc"
+        },
+        "page": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "default": 1
+        },
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        }
       },
-      "required": ["token"]
+      "required": [
+        "token"
+      ]
     },
     "HooditGetTokenPoolsData": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "token": { "$ref": "#/$defs/Address" },
-        "dex_ids": { "type": "array", "items": { "type": "string" } },
-        "sort": { "enum": ["liquidity", "volume_24h", "created_at", "price"] },
-        "direction": { "enum": ["asc", "desc"] },
-        "pools": { "type": "array", "items": { "$ref": "#/$defs/Pool" }, "maxItems": 20 },
-        "pagination": { "type": "object" },
-        "coverage": { "type": "object" }
+        "token": {
+          "$ref": "#/$defs/Address"
+        },
+        "dex_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "sort": {
+          "enum": [
+            "liquidity",
+            "volume_24h",
+            "created_at",
+            "price"
+          ]
+        },
+        "direction": {
+          "enum": [
+            "asc",
+            "desc"
+          ]
+        },
+        "pools": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Pool"
+          },
+          "maxItems": 20
+        },
+        "pagination": {
+          "type": "object"
+        },
+        "coverage": {
+          "type": "object"
+        }
       },
-      "required": ["token", "dex_ids", "sort", "direction", "pools", "pagination", "coverage"]
+      "required": [
+        "token",
+        "dex_ids",
+        "sort",
+        "direction",
+        "pools",
+        "pagination",
+        "coverage"
+      ]
     },
     "HooditGetTokenPoolsOutput": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "const": "1.3.0" },
-        "status": { "enum": ["ok", "partial", "error"] },
-        "data": { "anyOf": [{ "$ref": "#/$defs/HooditGetTokenPoolsData" }, { "type": "null" }] },
-        "meta": { "$ref": "#/$defs/Meta" },
-        "error": { "anyOf": [{ "$ref": "#/$defs/ToolError" }, { "type": "null" }] }
+        "schema_version": {
+          "const": "1.4.0"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "partial",
+            "error"
+          ]
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HooditGetTokenPoolsData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       },
-      "required": ["schema_version", "status", "data", "meta", "error"],
-      "allOf": [{
-        "if": { "properties": { "status": { "const": "error" } } },
-        "then": { "properties": { "data": { "type": "null" }, "error": { "$ref": "#/$defs/ToolError" } } },
-        "else": { "properties": { "data": { "$ref": "#/$defs/HooditGetTokenPoolsData" }, "error": { "type": "null" } } }
-      }]
+      "required": [
+        "schema_version",
+        "status",
+        "data",
+        "meta",
+        "error"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "error": {
+                "$ref": "#/$defs/ToolError"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/HooditGetTokenPoolsData"
+              },
+              "error": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
     },
     "HooditGetMarketOptionsInput": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "refresh": { "type": "boolean", "default": false }
+        "refresh": {
+          "type": "boolean",
+          "default": false
+        }
       }
     },
     "HooditGetMarketOptionsData": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "network": { "type": "object" },
-        "dexes": { "type": "array", "items": { "type": "object" } },
-        "discovery": { "type": "object" }
+        "network": {
+          "type": "object"
+        },
+        "dexes": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "discovery": {
+          "type": "object"
+        }
       },
-      "required": ["network", "dexes", "discovery"]
+      "required": [
+        "network",
+        "dexes",
+        "discovery"
+      ]
     },
     "HooditGetMarketOptionsOutput": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "schema_version": { "const": "1.3.0" },
-        "status": { "enum": ["ok", "partial", "error"] },
-        "data": { "anyOf": [{ "$ref": "#/$defs/HooditGetMarketOptionsData" }, { "type": "null" }] },
-        "meta": { "$ref": "#/$defs/Meta" },
-        "error": { "anyOf": [{ "$ref": "#/$defs/ToolError" }, { "type": "null" }] }
+        "schema_version": {
+          "const": "1.4.0"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "partial",
+            "error"
+          ]
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HooditGetMarketOptionsData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolError"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
       },
-      "required": ["schema_version", "status", "data", "meta", "error"],
-      "allOf": [{
-        "if": { "properties": { "status": { "const": "error" } } },
-        "then": { "properties": { "data": { "type": "null" }, "error": { "$ref": "#/$defs/ToolError" } } },
-        "else": { "properties": { "data": { "$ref": "#/$defs/HooditGetMarketOptionsData" }, "error": { "type": "null" } } }
-      }]
+      "required": [
+        "schema_version",
+        "status",
+        "data",
+        "meta",
+        "error"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "error": {
+                "$ref": "#/$defs/ToolError"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/HooditGetMarketOptionsData"
+              },
+              "error": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
     },
     "HooditGetCandlesInput": {
       "type": "object",
@@ -2266,7 +2352,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "1.3.0"
+          "const": "1.4.0"
         },
         "status": {
           "type": "string",
@@ -2360,7 +2446,11 @@
           "default": "0"
         },
         "side": {
-          "enum": ["buy", "sell", "both"],
+          "enum": [
+            "buy",
+            "sell",
+            "both"
+          ],
           "default": "both"
         }
       },
@@ -2380,7 +2470,11 @@
         },
         "side": {
           "type": "string",
-          "enum": ["buy", "sell", "both"]
+          "enum": [
+            "buy",
+            "sell",
+            "both"
+          ]
         },
         "trades": {
           "type": "array",
@@ -2389,7 +2483,74 @@
           },
           "maxItems": 100
         },
-        "summary": { "type": "object" },
+        "summary": {
+          "type": "object",
+          "properties": {
+            "distinct_senders": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "top_buyers": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sender": {
+                    "$ref": "#/$defs/Address"
+                  },
+                  "trades": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "volume_usd": {
+                    "$ref": "#/$defs/Decimal"
+                  }
+                },
+                "required": [
+                  "sender",
+                  "trades",
+                  "volume_usd"
+                ]
+              }
+            },
+            "top_sellers": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "sender": {
+                    "$ref": "#/$defs/Address"
+                  },
+                  "trades": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "volume_usd": {
+                    "$ref": "#/$defs/Decimal"
+                  }
+                },
+                "required": [
+                  "sender",
+                  "trades",
+                  "volume_usd"
+                ]
+              }
+            },
+            "sender_scope": {
+              "const": "transaction_sender_may_be_router_or_executor"
+            }
+          },
+          "required": [
+            "distinct_senders",
+            "top_buyers",
+            "top_sellers",
+            "sender_scope"
+          ]
+        },
         "coverage": {
           "type": "object",
           "additionalProperties": false,
@@ -2438,7 +2599,7 @@
       "additionalProperties": false,
       "properties": {
         "schema_version": {
-          "const": "1.3.0"
+          "const": "1.4.0"
         },
         "status": {
           "type": "string",
@@ -2511,167 +2672,79 @@
         }
       ]
     },
-    "HooditGetPortfolioInput": {
+    "Lifecycle": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Launchpad lifecycle as GeckoTerminal reports it. not_reported means no launchpad record (an instant-pool launch, a non-launchpad token, or not indexed) and is never 0% bonded.",
       "properties": {
-        "wallet_address": {
-          "$ref": "#/$defs/Address"
-        },
-        "cursor": {
-          "type": [
-            "string",
-            "null"
-          ],
-          "minLength": 1,
-          "maxLength": 4096,
-          "pattern": "^[A-Za-z0-9_-]+$",
-          "description": "Opaque continuation bound to this chain, wallet, fixed ERC-20 filter, and bounded hop count. Use JSON null for the first page (or omit the field when the client permits omission). For later pages, reuse only the exact next_cursor returned for the same wallet; never invent a cursor or placeholder."
-        },
-        "include_quotes": {
-          "type": "boolean",
-          "default": false
-        },
-        "valuation": {
-          "enum": ["none", "market", "quote_sample"],
-          "default": "none"
-        },
-        "security": {
-          "enum": ["none", "summary"],
-          "default": "none"
-        },
-        "sort": {
-          "enum": ["value_desc", "symbol"],
-          "default": "value_desc"
-        },
-        "min_value_usd": {
-          "$ref": "#/$defs/Decimal"
-        },
-        "include_unpriced": {
-          "type": "boolean",
-          "default": true
-        },
-        "refresh": {
-          "type": "boolean",
-          "default": false
-        }
-      },
-      "required": [
-        "wallet_address"
-      ]
-    },
-    "HooditGetPortfolioData": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "wallet_address": {
-          "$ref": "#/$defs/Address"
-        },
-        "valuation_mode": { "enum": ["none", "market", "quote_sample"] },
-        "security_mode": { "enum": ["none", "summary"] },
-        "quote_token": {
-          "$ref": "#/$defs/Token"
-        },
-        "native_included": {
-          "type": "boolean"
-        },
-        "holdings": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/Holding"
-          },
-          "maxItems": 51
-        },
-        "pagination": {
-          "$ref": "#/$defs/InventoryPagination"
-        },
-        "summary": {
-          "$ref": "#/$defs/PortfolioSummary"
-        },
-        "coverage": {
-          "type": "object"
-        }
-      },
-      "required": [
-        "wallet_address",
-        "quote_token",
-        "native_included",
-        "holdings",
-        "pagination",
-        "summary"
-      ]
-    },
-    "HooditGetPortfolioOutput": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "schema_version": {
-          "const": "1.3.0"
-        },
-        "status": {
+        "state": {
           "type": "string",
           "enum": [
-            "ok",
-            "partial",
-            "error"
+            "bonding_curve",
+            "graduated",
+            "not_reported",
+            "unknown"
           ]
         },
-        "data": {
+        "graduation_pct": {
           "anyOf": [
             {
-              "$ref": "#/$defs/HooditGetPortfolioData"
+              "$ref": "#/$defs/Decimal"
             },
             {
               "type": "null"
             }
           ]
         },
-        "meta": {
-          "$ref": "#/$defs/Meta"
-        },
-        "error": {
+        "graduated_at": {
           "anyOf": [
             {
-              "$ref": "#/$defs/ToolError"
+              "$ref": "#/$defs/Time"
             },
             {
               "type": "null"
             }
           ]
+        },
+        "destination_pool_id": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PoolId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "const": "geckoterminal"
         }
       },
       "required": [
-        "schema_version",
-        "status",
-        "data",
-        "meta",
-        "error"
+        "state",
+        "graduation_pct",
+        "graduated_at",
+        "destination_pool_id",
+        "source"
       ],
       "allOf": [
         {
           "if": {
             "properties": {
-              "status": {
-                "const": "error"
+              "state": {
+                "enum": [
+                  "not_reported",
+                  "bonding_curve"
+                ]
               }
             }
           },
           "then": {
             "properties": {
-              "data": {
+              "graduated_at": {
                 "type": "null"
               },
-              "error": {
-                "$ref": "#/$defs/ToolError"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "data": {
-                "$ref": "#/$defs/HooditGetPortfolioData"
-              },
-              "error": {
+              "destination_pool_id": {
                 "type": "null"
               }
             }
@@ -2679,179 +2752,363 @@
         }
       ]
     },
-    "HooditGetHoldingInput": {
+    "HooditCheckExitInput": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "wallet_address": {
+        "token": {
           "$ref": "#/$defs/Address"
         },
-        "token": {
-          "$ref": "#/$defs/TokenId"
+        "mode": {
+          "enum": [
+            "sell",
+            "round_trip"
+          ],
+          "default": "sell"
         },
-        "quote_balance_bps": {
+        "amount": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fraction_bps": {
           "type": "integer",
           "minimum": 1,
           "maximum": 10000,
-          "default": 100
+          "default": 10000
         },
-        "include_quote": {
-          "type": "boolean",
-          "default": false
+        "eth_amount": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
-        "security": {
-          "enum": ["none", "summary"],
-          "default": "none"
+        "receive": {
+          "enum": [
+            "eth",
+            "usdg"
+          ],
+          "default": "eth"
         },
-        "refresh": {
-          "type": "boolean",
-          "default": true
+        "wallet_address": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Address"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
-        "wallet_address",
         "token"
       ]
     },
-    "HooditGetHoldingData": {
+    "ExitQuote": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "wallet_address": {
-          "$ref": "#/$defs/Address"
+        "route_found": {
+          "type": "boolean"
         },
-        "quote_token": {
-          "$ref": "#/$defs/Token"
-        },
-        "holding": {
-          "$ref": "#/$defs/Holding"
-        },
-        "requested_balance_bps": {
-          "type": "integer",
-          "minimum": 1,
-          "maximum": 10000
-        },
-        "sell_amount": {
+        "amount_in": {
           "$ref": "#/$defs/Amount"
         },
-        "security": { "type": "object" },
-        "ownership": { "type": "object" },
-        "liquidity_context": { "type": ["object", "null"] }
-      },
-      "required": [
-        "wallet_address",
-        "quote_token",
-        "holding",
-        "requested_balance_bps",
-        "sell_amount"
-      ]
-    },
-    "HooditGetHoldingOutput": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "schema_version": {
-          "const": "1.3.0"
-        },
-        "status": {
-          "type": "string",
-          "enum": [
-            "ok",
-            "partial",
-            "error"
-          ]
-        },
-        "data": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/HooditGetHoldingData"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "meta": {
-          "$ref": "#/$defs/Meta"
-        },
-        "error": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/ToolError"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "schema_version",
-        "status",
-        "data",
-        "meta",
-        "error"
-      ],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "status": {
-                "const": "error"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "data": {
-                "type": "null"
-              },
-              "error": {
-                "$ref": "#/$defs/ToolError"
-              }
-            }
-          },
-          "else": {
-            "properties": {
-              "data": {
-                "$ref": "#/$defs/HooditGetHoldingData"
-              },
-              "error": {
-                "type": "null"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "InventoryPagination": {
-      "type": "object",
-      "additionalProperties": false,
-      "description": "One Blockscout ERC-20 provider page. The continuation is opaque, stateless, versioned, and bound to chain, wallet, filter, and hop count.",
-      "properties": {
-        "returned": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 50,
-          "description": "Valid nonzero ERC-20 rows; native ETH is not counted."
-        },
-        "provider_rows_returned": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 50
-        },
-        "displayed": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 51
-        },
-        "next_cursor": {
+        "route": {
           "anyOf": [
             {
               "type": "string",
               "minLength": 1,
-              "maxLength": 4096,
-              "pattern": "^[A-Za-z0-9_-]+$"
+              "maxLength": 160
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "expected_out": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Amount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_out": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Amount"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value_in_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value_out_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "loss_pct": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignedDecimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gas_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fees_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approval_required": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "route_found",
+        "amount_in",
+        "route",
+        "expected_out",
+        "min_out",
+        "value_in_usd",
+        "value_out_usd",
+        "loss_pct",
+        "gas_usd",
+        "fees_usd",
+        "approval_required"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "route_found": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "route": {
+                "type": "null"
+              },
+              "expected_out": {
+                "type": "null"
+              },
+              "min_out": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "HooditCheckExitData": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "token": {
+          "$ref": "#/$defs/Token"
+        },
+        "mode": {
+          "enum": [
+            "sell",
+            "round_trip"
+          ]
+        },
+        "receive": {
+          "enum": [
+            "eth",
+            "usdg"
+          ]
+        },
+        "sender": {
+          "$ref": "#/$defs/Address"
+        },
+        "sender_kind": {
+          "enum": [
+            "wallet",
+            "placeholder"
+          ]
+        },
+        "buy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExitQuote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sell": {
+          "$ref": "#/$defs/ExitQuote"
+        },
+        "round_trip_loss_pct": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SignedDecimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sell_mark_value_usd": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Decimal"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "source": {
+              "const": "lifi"
+            },
+            "slippage": {
+              "const": "0.005"
+            },
+            "executable": {
+              "const": false
+            },
+            "balances_checked": {
+              "const": false
+            },
+            "approvals_checked": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "source",
+            "slippage",
+            "executable",
+            "balances_checked",
+            "approvals_checked"
+          ]
+        }
+      },
+      "required": [
+        "token",
+        "mode",
+        "receive",
+        "sender",
+        "sender_kind",
+        "buy",
+        "sell",
+        "round_trip_loss_pct",
+        "sell_mark_value_usd",
+        "coverage"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "sell"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "buy": {
+                "type": "null"
+              },
+              "round_trip_loss_pct": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "HooditCheckExitOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1.4.0"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "partial",
+            "error"
+          ]
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HooditCheckExitData"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolError"
             },
             {
               "type": "null"
@@ -2860,7 +3117,42 @@
         }
       },
       "required": [
-        "next_cursor"
+        "schema_version",
+        "status",
+        "data",
+        "meta",
+        "error"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "error"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "data": {
+                "type": "null"
+              },
+              "error": {
+                "$ref": "#/$defs/ToolError"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/HooditCheckExitData"
+              },
+              "error": {
+                "type": "null"
+              }
+            }
+          }
+        }
       ]
     }
   }

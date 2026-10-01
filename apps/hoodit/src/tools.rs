@@ -2,10 +2,8 @@ use crate::{model, providers::ProviderError};
 use serde_json::Value;
 
 mod markets;
-mod portfolio;
 
 pub use markets::*;
-pub use portfolio::*;
 
 fn provider_error(error: ProviderError) -> Value {
     let code = match error.code {

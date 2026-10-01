@@ -33,7 +33,7 @@ impl DynAomiTool for SearchTokens {
     const NAME: &'static str = "hoodit_search_tokens";
     const DESCRIPTION: &'static str = "Search Robinhood Chain tokens by name, symbol, or exact 0x contract address. Use this before exact-token tools when the user supplied only a name or symbol; return candidates and never guess among ambiguous matches.";
 
-    fn run(app: &HooditApp, args: SearchArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: SearchArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let query = args.query.trim();
         if query.is_empty() || query.len() > 100 {
             return Ok(model::error(
@@ -46,7 +46,7 @@ impl DynAomiTool for SearchTokens {
         let runtime = app.runtime()?;
         let mut read = ReadContext::markets(false);
         if let Ok(exact_address) = model::address(query) {
-            let hit = match Gecko::new(&runtime).token(&exact_address, &mut read) {
+            let hit = match Gecko::new(&runtime, &ctx).token(&exact_address, &mut read) {
                 Ok(response) => response_rows(&response).into_iter().next().map(|row| {
                     json!({"token":token_from_resource(&row),"match":"address","reference_pool":null,"reference_price_usd":model::string(&row,&["attributes","price_usd"]),"reference_pool_liquidity_usd":null})
                 }),
@@ -69,7 +69,7 @@ impl DynAomiTool for SearchTokens {
             ));
         }
 
-        let response = match Gecko::new(&runtime).search(query, page, &mut read) {
+        let response = match Gecko::new(&runtime, &ctx).search(query, page, &mut read) {
             Ok(response) => response,
             Err(error) => return Ok(provider_error(error)),
         };

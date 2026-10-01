@@ -54,7 +54,7 @@ impl DynAomiTool for GetCandles {
     const NAME: &'static str = "hoodit_get_candles";
     const DESCRIPTION: &'static str = "Read USD OHLCV history for one exact token contract in one selected pool. Requires a 0x contract address; timestamps are Unix seconds, and results are single-pool market history rather than wallet performance or an executable quote.";
 
-    fn run(app: &HooditApp, args: CandlesArgs, _: DynToolCallCtx) -> Result<Value, String> {
+    fn run(app: &HooditApp, args: CandlesArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = invalid_argument!(model::address(&args.token));
         let interval = args.interval.as_deref().unwrap_or("1h");
         let (timeframe, aggregate, width_seconds) = match interval {
@@ -93,7 +93,7 @@ impl DynAomiTool for GetCandles {
         let explicit_pool_id =
             invalid_argument!(args.pool_id.as_deref().map(normalize_pool_id).transpose());
         let runtime = app.runtime()?;
-        let gecko = Gecko::new(&runtime);
+        let gecko = Gecko::new(&runtime, &ctx);
         let mut read = ReadContext::markets(false);
         let (selected_pool, selected_pool_id) =
             match resolve_pool(&gecko, &token, explicit_pool_id.as_deref(), &mut read) {

@@ -4,7 +4,7 @@
     {
       "tool": "hoodit_discover_pools",
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -32,7 +32,7 @@
     {
       "tool": "hoodit_search_tokens",
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -60,7 +60,7 @@
     {
       "tool": "hoodit_get_token",
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -88,7 +88,7 @@
     {
       "tool": "hoodit_get_market_options",
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {

@@ -1,13 +1,12 @@
 # Hoodit
 
-Hoodit is a Robinhood Chain trading assistant for token discovery, market research, wallet reads, and user-authorized trades. Canonical Stock Token trading remains available through the host's resolver and execution flow.
+Hoodit is a Robinhood Chain trading assistant for token and launchpad discovery, market research, exit checks, and user-authorized trades. Canonical Stock Token trading remains available through the host's resolver and execution flow.
 
 ## Repository layout
 
 - `app/` and `public/` — Next.js landing page and product UI
-- `apps/hoodit/` — Rust v1.3 dynamic application loaded by Aomi; `src/tools.rs`
-  is the public facade, while `src/tools/markets/` and `src/tools/portfolio/`
-  own the market and wallet reads respectively
+- `apps/hoodit/` — Rust v1.4 dynamic application loaded by Aomi; `src/tools.rs`
+  is the public facade and `src/tools/markets/` owns every read tool
 - `contracts/hoodit-v1/` — canonical JSON Schemas, examples, and independent validator
 - `docs/hoodit-v1-validation.md` — local and sanitized provider evidence, with deployment work called out separately
 - `.aomi/config.json` — Aomi Project manifest used by Build's community repository import
@@ -47,7 +46,7 @@ origin, credential and error boundaries. Wallet signing requires separate tests.
 
 ## Aomi application
 
-The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. GeckoTerminal market data, GoPlus security evidence, CoinGecko native-asset pricing, and LI.FI read-only sample quotes use public keyless APIs. Wallet reads use a free Blockscout key configured only in Hoodit's Builder Environment. Provider credentials are delivered by the host and never exposed as tool arguments, requested from end users, or handled by the frontend relay.
+The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. GeckoTerminal market data, GoPlus security evidence, and LI.FI read-only exit quotes use public keyless APIs. An optional `COINGECKO_API_KEY` (demo) or `COINGECKO_PRO_API_KEY` in Hoodit's Builder Environment routes the same market reads through CoinGecko's keyed onchain API, raising the shared 10-per-minute GeckoTerminal allowance to 30 or 250. Wallet balances come from the host's `get_erc20_holdings`. Provider credentials are delivered by the host and never exposed as tool arguments, requested from end users, or handled by the frontend relay.
 
 ```bash
 cargo test --workspace
@@ -56,12 +55,15 @@ aomi-build sdk check --path . --required-version 5.1.1
 ```
 
 The natural-language application compatibility scenario lives at `apps/hoodit/test.json`.
-The app exposes three skills: `hoodit/markets` with seven read tools,
-`hoodit/portfolio` with two read tools, and the instruction-only
-`hoodit/coin-scanner` audit playbook. The scanner activates with the market
-skill and reuses its tools rather than duplicating schemas or dispatch routes.
-All nine tools remain hidden until their owning skill is activated. Actual
-swaps use the inherited host execution lifecycle.
+The app exposes two skills: `hoodit/markets` with eight read tools and the
+instruction-only `hoodit/coin-scanner` audit playbook. The scanner activates
+with the market skill and reuses its tools rather than duplicating schemas or
+dispatch routes. All eight tools remain hidden until the market skill is
+activated. Tokens report their launchpad lifecycle (bonding-curve progress or
+graduation and destination pool), trades keep their sending wallets, and
+`hoodit_check_exit` quotes an exact-size sell or a buy-then-sell round trip.
+Wallet balances use the host's holdings tool, and actual swaps use the
+inherited host execution lifecycle.
 
 ### Research quality evaluations
 

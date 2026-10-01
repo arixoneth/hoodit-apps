@@ -242,6 +242,39 @@
         "thoughts? 0xb6a906d2d95e862cf4fd43b9e30162aee19eed8d"
       ],
       "expectation": "Inspect the exact supplied contract on Robinhood Chain without asking for a ticker. Give an evidence-led view; do not infer authenticity from a name, assume a bounce means recovery, or invent missing candles."
+    },
+    {
+      "id": "live_graduation",
+      "split": "validation",
+      "prompts": [
+        "is PARLEY 0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05 still on the pons curve or did it graduate?",
+        "how's the chart since then?"
+      ],
+      "expectation": "State the reported launchpad lifecycle from the token read (curve progress, or graduation time and destination pool) rather than inferring it from a DEX name. The chart follow-up reads candles from the selected post-graduation pool and keeps their timestamps."
+    },
+    {
+      "id": "live_curve_watch",
+      "split": "validation",
+      "prompts": [
+        "anything on the pons curve close to graduating?"
+      ],
+      "expectation": "Screen launchpad pools, use each result's lifecycle to rank curve progress, and disclose scanned coverage. Curve depth is not LP depth; not_reported is never treated as 0% bonded. No pick is acceptable only when supported."
+    },
+    {
+      "id": "live_sellers",
+      "split": "validation",
+      "prompts": [
+        "who's selling PARLEY 0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05 rn? one wallet dumping or spread out?"
+      ],
+      "expectation": "Use the trades sample's senders and top sellers to describe concentration, state the sample window and size, and say a sender can be a router or executor rather than a verified person."
+    },
+    {
+      "id": "live_exit_round_trip",
+      "split": "validation",
+      "prompts": [
+        "0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05 if i put 0.05 eth in could i get back out?"
+      ],
+      "expectation": "Run a read-only round-trip exit check and report route, round-trip loss, and gas. Treat a missing or failed sell leg as an unproven exit. Never claim the quote is executable or prepare a trade."
     }
   ]
 }

@@ -7,7 +7,7 @@
         "query": "EXAMPLE"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "query": "EXAMPLE",
@@ -61,7 +61,7 @@
         "query": "EXAMPLE"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -93,7 +93,7 @@
         "duration": "1h"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "feed": "trending",
@@ -176,6 +176,13 @@
                   "buyers": 21,
                   "sellers": 18
                 }
+              },
+              "lifecycle": {
+                "state": "graduated",
+                "graduation_pct": "100",
+                "graduated_at": "2026-09-07T16:17:38Z",
+                "destination_pool_id": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "source": "geckoterminal"
               }
             }
           ],
@@ -210,7 +217,7 @@
         "duration": "1h"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -241,7 +248,7 @@
         "token": "0x1111111111111111111111111111111111111111"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": {
@@ -334,7 +341,14 @@
           },
           "selected_token_price_usd": "0.01",
           "other_pools": [],
-          "metadata": null
+          "metadata": null,
+          "lifecycle": {
+            "state": "bonding_curve",
+            "graduation_pct": "50.26",
+            "graduated_at": null,
+            "destination_pool_id": null,
+            "source": "geckoterminal"
+          }
         },
         "meta": {
           "chain_id": 4663,
@@ -359,7 +373,7 @@
         "token": "0x1111111111111111111111111111111111111111"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -393,7 +407,7 @@
         "before": 1789560000
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": "0x1111111111111111111111111111111111111111",
@@ -461,7 +475,7 @@
         "before": 1789560000
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -493,7 +507,7 @@
         "limit": 1
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": "0x1111111111111111111111111111111111111111",
@@ -512,7 +526,9 @@
               "counter_token": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
               "counter_amount": "1",
               "price_usd": "0.01",
-              "volume_usd": "1"
+              "volume_usd": "1",
+              "block_number": 1000,
+              "sender": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
             }
           ],
           "coverage": {
@@ -521,6 +537,12 @@
             "provider_trade_cap": 300,
             "returned": 1,
             "complete_history": false
+          },
+          "summary": {
+            "distinct_senders": 1,
+            "top_buyers": [],
+            "top_sellers": [],
+            "sender_scope": "transaction_sender_may_be_router_or_executor"
           }
         },
         "meta": {
@@ -547,7 +569,7 @@
         "limit": 1
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "error",
         "data": null,
         "meta": {
@@ -568,1817 +590,6 @@
           "code": "UPSTREAM_UNAVAILABLE",
           "message": "Illustrative upstream timeout.",
           "retryable": true,
-          "retry_after_seconds": null
-        }
-      }
-    },
-    {
-      "tool": "hoodit_get_portfolio",
-      "input": {
-        "wallet_address": "0x3333333333333333333333333333333333333333",
-        "include_quotes": true
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "ok",
-        "data": {
-          "wallet_address": "0x3333333333333333333333333333333333333333",
-          "quote_token": {
-            "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
-            "kind": "erc20",
-            "symbol": "USDG",
-            "name": "Illustrative USDG metadata",
-            "decimals": 6,
-            "image_url": null
-          },
-          "native_included": true,
-          "holdings": [
-            {
-              "token": {
-                "id": "0x1111111111111111111111111111111111111111",
-                "kind": "erc20",
-                "symbol": "EXAMPLE",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            }
-          ],
-          "pagination": {
-            "returned": 1,
-            "next_cursor": null
-          },
-          "summary": {
-            "scope": "wallet",
-            "holdings_count": 1,
-            "priced_count": 1,
-            "unpriced_count": 0,
-            "priced_value_usdg": "100",
-            "total_value_usdg": "100"
-          }
-        },
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": []
-        },
-        "error": null
-      }
-    },
-    {
-      "tool": "hoodit_get_portfolio",
-      "input": {
-        "wallet_address": "0x3333333333333333333333333333333333333333"
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "error",
-        "data": null,
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": []
-        },
-        "error": {
-          "code": "UPSTREAM_UNAVAILABLE",
-          "message": "Illustrative upstream timeout.",
-          "retryable": true,
-          "retry_after_seconds": null
-        }
-      }
-    },
-    {
-      "tool": "hoodit_get_holding",
-      "input": {
-        "wallet_address": "0x3333333333333333333333333333333333333333",
-        "token": "0x1111111111111111111111111111111111111111",
-        "quote_balance_bps": 100
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "ok",
-        "data": {
-          "wallet_address": "0x3333333333333333333333333333333333333333",
-          "quote_token": {
-            "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
-            "kind": "erc20",
-            "symbol": "USDG",
-            "name": "Illustrative USDG metadata",
-            "decimals": 6,
-            "image_url": null
-          },
-          "holding": {
-            "token": {
-              "id": "0x1111111111111111111111111111111111111111",
-              "kind": "erc20",
-              "symbol": "EXAMPLE",
-              "name": "Illustrative Token",
-              "decimals": 18,
-              "image_url": null
-            },
-            "balance": {
-              "atomic": "10000000000000000000000",
-              "formatted": "10000"
-            },
-            "valuation": {
-              "status": "quoted",
-              "unit_price_usdg": "0.01",
-              "value_usdg": "100",
-              "reason": null,
-              "quote": {
-                "input_amount": {
-                  "atomic": "100000000000000000000",
-                  "formatted": "100"
-                },
-                "expected_output": {
-                  "atomic": "1000000",
-                  "formatted": "1"
-                },
-                "minimum_output": {
-                  "atomic": "995000",
-                  "formatted": "0.995"
-                },
-                "route_name": "example-route",
-                "gas_cost_usd": "0.001",
-                "quoted_at": "2026-09-16T12:00:00Z",
-                "slippage_bps": 50,
-                "preflighted": false
-              }
-            }
-          },
-          "requested_balance_bps": 100,
-          "sell_amount": {
-            "atomic": "100000000000000000000",
-            "formatted": "100"
-          }
-        },
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": []
-        },
-        "error": null
-      }
-    },
-    {
-      "tool": "hoodit_get_holding",
-      "input": {
-        "wallet_address": "0x3333333333333333333333333333333333333333",
-        "token": "0x1111111111111111111111111111111111111111",
-        "quote_balance_bps": 100
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "error",
-        "data": null,
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": []
-        },
-        "error": {
-          "code": "UPSTREAM_UNAVAILABLE",
-          "message": "Illustrative upstream timeout.",
-          "retryable": true,
-          "retry_after_seconds": null
-        }
-      }
-    },
-    {
-      "tool": "hoodit_get_portfolio",
-      "input": {
-        "wallet_address": "0x3333333333333333333333333333333333333333",
-        "cursor": "djE6NDY2MzpmaXh0dXJlX2N1cnNvcg",
-        "include_quotes": false
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "ok",
-        "data": {
-          "wallet_address": "0x3333333333333333333333333333333333333333",
-          "quote_token": {
-            "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
-            "kind": "erc20",
-            "symbol": "USDG",
-            "name": "Illustrative USDG metadata",
-            "decimals": 6,
-            "image_url": null
-          },
-          "native_included": false,
-          "holdings": [
-            {
-              "token": {
-                "id": "0x1111111111111111111111111111111111111111",
-                "kind": "erc20",
-                "symbol": "EXAMPLE",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "not_requested",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": null,
-                "quote": null
-              }
-            }
-          ],
-          "pagination": {
-            "returned": 1,
-            "next_cursor": "djE6NDY2MzpuZXh0X2ZpeHR1cmU"
-          },
-          "summary": {
-            "scope": "page",
-            "holdings_count": 1,
-            "priced_count": 0,
-            "unpriced_count": 1,
-            "priced_value_usdg": null,
-            "total_value_usdg": null
-          }
-        },
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": []
-        },
-        "error": null
-      }
-    },
-    {
-      "tool": "hoodit_get_portfolio",
-      "input": {
-        "wallet_address": "0x3333333333333333333333333333333333333333",
-        "include_quotes": true
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "partial",
-        "data": {
-          "wallet_address": "0x3333333333333333333333333333333333333333",
-          "quote_token": {
-            "id": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
-            "kind": "erc20",
-            "symbol": "USDG",
-            "name": "Illustrative USDG metadata",
-            "decimals": 6,
-            "image_url": null
-          },
-          "native_included": true,
-          "holdings": [
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000001",
-                "kind": "erc20",
-                "symbol": "T1",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000002",
-                "kind": "erc20",
-                "symbol": "T2",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000003",
-                "kind": "erc20",
-                "symbol": "T3",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000004",
-                "kind": "erc20",
-                "symbol": "T4",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000005",
-                "kind": "erc20",
-                "symbol": "T5",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000006",
-                "kind": "erc20",
-                "symbol": "T6",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000007",
-                "kind": "erc20",
-                "symbol": "T7",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000008",
-                "kind": "erc20",
-                "symbol": "T8",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000009",
-                "kind": "erc20",
-                "symbol": "T9",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000000a",
-                "kind": "erc20",
-                "symbol": "T10",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000000b",
-                "kind": "erc20",
-                "symbol": "T11",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000000c",
-                "kind": "erc20",
-                "symbol": "T12",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000000d",
-                "kind": "erc20",
-                "symbol": "T13",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000000e",
-                "kind": "erc20",
-                "symbol": "T14",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000000f",
-                "kind": "erc20",
-                "symbol": "T15",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000010",
-                "kind": "erc20",
-                "symbol": "T16",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000011",
-                "kind": "erc20",
-                "symbol": "T17",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000012",
-                "kind": "erc20",
-                "symbol": "T18",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000013",
-                "kind": "erc20",
-                "symbol": "T19",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000014",
-                "kind": "erc20",
-                "symbol": "T20",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "quoted",
-                "unit_price_usdg": "0.01",
-                "value_usdg": "100",
-                "reason": null,
-                "quote": {
-                  "input_amount": {
-                    "atomic": "100000000000000000000",
-                    "formatted": "100"
-                  },
-                  "expected_output": {
-                    "atomic": "1000000",
-                    "formatted": "1"
-                  },
-                  "minimum_output": {
-                    "atomic": "995000",
-                    "formatted": "0.995"
-                  },
-                  "route_name": "example-route",
-                  "gas_cost_usd": "0.001",
-                  "quoted_at": "2026-09-16T12:00:00Z",
-                  "slippage_bps": 50,
-                  "preflighted": false
-                }
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000015",
-                "kind": "erc20",
-                "symbol": "T21",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000016",
-                "kind": "erc20",
-                "symbol": "T22",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000017",
-                "kind": "erc20",
-                "symbol": "T23",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000018",
-                "kind": "erc20",
-                "symbol": "T24",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000019",
-                "kind": "erc20",
-                "symbol": "T25",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000001a",
-                "kind": "erc20",
-                "symbol": "T26",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000001b",
-                "kind": "erc20",
-                "symbol": "T27",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000001c",
-                "kind": "erc20",
-                "symbol": "T28",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000001d",
-                "kind": "erc20",
-                "symbol": "T29",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000001e",
-                "kind": "erc20",
-                "symbol": "T30",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000001f",
-                "kind": "erc20",
-                "symbol": "T31",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000020",
-                "kind": "erc20",
-                "symbol": "T32",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000021",
-                "kind": "erc20",
-                "symbol": "T33",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000022",
-                "kind": "erc20",
-                "symbol": "T34",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000023",
-                "kind": "erc20",
-                "symbol": "T35",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000024",
-                "kind": "erc20",
-                "symbol": "T36",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000025",
-                "kind": "erc20",
-                "symbol": "T37",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000026",
-                "kind": "erc20",
-                "symbol": "T38",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000027",
-                "kind": "erc20",
-                "symbol": "T39",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000028",
-                "kind": "erc20",
-                "symbol": "T40",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000029",
-                "kind": "erc20",
-                "symbol": "T41",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000002a",
-                "kind": "erc20",
-                "symbol": "T42",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000002b",
-                "kind": "erc20",
-                "symbol": "T43",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000002c",
-                "kind": "erc20",
-                "symbol": "T44",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000002d",
-                "kind": "erc20",
-                "symbol": "T45",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000002e",
-                "kind": "erc20",
-                "symbol": "T46",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x000000000000000000000000000000000000002f",
-                "kind": "erc20",
-                "symbol": "T47",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000030",
-                "kind": "erc20",
-                "symbol": "T48",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000031",
-                "kind": "erc20",
-                "symbol": "T49",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            },
-            {
-              "token": {
-                "id": "0x0000000000000000000000000000000000000032",
-                "kind": "erc20",
-                "symbol": "T50",
-                "name": "Illustrative Token",
-                "decimals": 18,
-                "image_url": null
-              },
-              "balance": {
-                "atomic": "10000000000000000000000",
-                "formatted": "10000"
-              },
-              "valuation": {
-                "status": "unpriced",
-                "unit_price_usdg": null,
-                "value_usdg": null,
-                "reason": "budget_exhausted",
-                "quote": null
-              }
-            }
-          ],
-          "pagination": {
-            "returned": 50,
-            "next_cursor": "djE6NDY2Mzo1MF9yb3dz"
-          },
-          "summary": {
-            "scope": "page",
-            "holdings_count": 50,
-            "priced_count": 20,
-            "unpriced_count": 30,
-            "priced_value_usdg": "2000",
-            "total_value_usdg": null
-          }
-        },
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": [
-            {
-              "code": "QUOTE_BUDGET_EXHAUSTED",
-              "message": "Valuation stopped after 20 non-USDG quote attempts; all holdings remain in the response.",
-              "subject": null
-            }
-          ]
-        },
-        "error": null
-      }
-    },
-    {
-      "tool": "hoodit_get_portfolio",
-      "input": {
-        "wallet_address": "0x4444444444444444444444444444444444444444",
-        "cursor": "djE6NDY2MzpvdGhlcl93YWxsZXQ"
-      },
-      "output": {
-        "schema_version": "1.3.0",
-        "status": "error",
-        "data": null,
-        "meta": {
-          "chain_id": 4663,
-          "generated_at": "2026-09-16T12:00:00Z",
-          "sources": [
-            {
-              "provider": "hoodit",
-              "resource": "illustrative-fixture-not-live-data",
-              "fetched_at": "2026-09-16T12:00:00Z",
-              "provider_updated_at": null,
-              "cached": false
-            }
-          ],
-          "warnings": []
-        },
-        "error": {
-          "code": "INVALID_ARGUMENT",
-          "message": "The portfolio cursor is not valid for this wallet.",
-          "retryable": false,
           "retry_after_seconds": null
         }
       }
@@ -2389,7 +600,7 @@
         "token": "0x1111111111111111111111111111111111111111"
       },
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
           "token": "0x1111111111111111111111111111111111111111",
@@ -2397,13 +608,30 @@
           "sort": "liquidity",
           "direction": "desc",
           "pools": [],
-          "pagination": {"page": 1, "page_size": 20, "returned": 0, "next_page": null},
-          "coverage": {"scope": "provider_page", "ranked_within_scanned_candidates": true, "executable_route": false}
+          "pagination": {
+            "page": 1,
+            "page_size": 20,
+            "returned": 0,
+            "next_page": null
+          },
+          "coverage": {
+            "scope": "provider_page",
+            "ranked_within_scanned_candidates": true,
+            "executable_route": false
+          }
         },
         "meta": {
           "chain_id": 4663,
           "generated_at": "2026-09-18T12:00:00Z",
-          "sources": [{"provider":"hoodit","resource":"illustrative-fixture-not-live-data","fetched_at":"2026-09-18T12:00:00Z","provider_updated_at":null,"cached":false}],
+          "sources": [
+            {
+              "provider": "hoodit",
+              "resource": "illustrative-fixture-not-live-data",
+              "fetched_at": "2026-09-18T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
           "warnings": []
         },
         "error": null
@@ -2413,20 +641,226 @@
       "tool": "hoodit_get_market_options",
       "input": {},
       "output": {
-        "schema_version": "1.3.0",
+        "schema_version": "1.4.0",
         "status": "ok",
         "data": {
-          "network": {"id":"robinhood","chain_id":4663},
+          "network": {
+            "id": "robinhood",
+            "chain_id": 4663
+          },
           "dexes": [],
-          "discovery": {"mode":"free_bounded_scan","paid_megafilter":{"configured":false,"validated":false}}
+          "discovery": {
+            "mode": "free_bounded_scan",
+            "paid_megafilter": {
+              "configured": false,
+              "validated": false
+            }
+          }
         },
         "meta": {
           "chain_id": 4663,
           "generated_at": "2026-09-18T12:00:00Z",
-          "sources": [{"provider":"hoodit","resource":"illustrative-fixture-not-live-data","fetched_at":"2026-09-18T12:00:00Z","provider_updated_at":null,"cached":false}],
+          "sources": [
+            {
+              "provider": "hoodit",
+              "resource": "illustrative-fixture-not-live-data",
+              "fetched_at": "2026-09-18T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
           "warnings": []
         },
         "error": null
+      }
+    },
+    {
+      "tool": "hoodit_check_exit",
+      "input": {
+        "token": "0x1111111111111111111111111111111111111111",
+        "amount": "2000",
+        "fraction_bps": 5000
+      },
+      "output": {
+        "schema_version": "1.4.0",
+        "status": "ok",
+        "data": {
+          "token": {
+            "id": "0x1111111111111111111111111111111111111111",
+            "kind": "erc20",
+            "symbol": "EX",
+            "name": "Example",
+            "decimals": 18,
+            "image_url": null
+          },
+          "mode": "sell",
+          "receive": "eth",
+          "sender": "0x000000000000000000000000000000000000dead",
+          "sender_kind": "placeholder",
+          "buy": null,
+          "sell": {
+            "route_found": true,
+            "amount_in": {
+              "atomic": "1000000000000000000000",
+              "formatted": "1000"
+            },
+            "route": "kyberswap",
+            "expected_out": {
+              "atomic": "359197303636875",
+              "formatted": "0.000359197303636875"
+            },
+            "min_out": {
+              "atomic": "359197303636875",
+              "formatted": "0.000359197303636875"
+            },
+            "value_in_usd": "1.0133",
+            "value_out_usd": "0.9644",
+            "loss_pct": "4.83",
+            "gas_usd": "0.0189",
+            "fees_usd": "0.0025",
+            "approval_required": true
+          },
+          "round_trip_loss_pct": null,
+          "sell_mark_value_usd": "1.02",
+          "coverage": {
+            "source": "lifi",
+            "slippage": "0.005",
+            "executable": false,
+            "balances_checked": false,
+            "approvals_checked": false
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-10-01T12:00:00Z",
+          "sources": [
+            {
+              "provider": "geckoterminal",
+              "resource": "/networks/robinhood/tokens/0x1111111111111111111111111111111111111111",
+              "fetched_at": "2026-10-01T12:00:00Z",
+              "provider_updated_at": null,
+              "cached": false
+            },
+            {
+              "provider": "lifi",
+              "resource": "/quote",
+              "fetched_at": "2026-10-01T12:00:01Z",
+              "provider_updated_at": null,
+              "cached": false
+            }
+          ],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_check_exit",
+      "input": {
+        "token": "0x1111111111111111111111111111111111111111",
+        "mode": "round_trip",
+        "eth_amount": "0.001"
+      },
+      "output": {
+        "schema_version": "1.4.0",
+        "status": "ok",
+        "data": {
+          "token": {
+            "id": "0x1111111111111111111111111111111111111111",
+            "kind": "erc20",
+            "symbol": "EX",
+            "name": "Example",
+            "decimals": 18,
+            "image_url": null
+          },
+          "mode": "round_trip",
+          "receive": "eth",
+          "sender": "0x000000000000000000000000000000000000dead",
+          "sender_kind": "placeholder",
+          "buy": {
+            "route_found": true,
+            "amount_in": {
+              "atomic": "1000000000000000",
+              "formatted": "0.001"
+            },
+            "route": "fly",
+            "expected_out": {
+              "atomic": "111940727109084651631567",
+              "formatted": "111940.727109084651631567"
+            },
+            "min_out": {
+              "atomic": "111940727109084651631567",
+              "formatted": "111940.727109084651631567"
+            },
+            "value_in_usd": "1.0133",
+            "value_out_usd": "0.9644",
+            "loss_pct": "4.83",
+            "gas_usd": "0.0189",
+            "fees_usd": "0.0025",
+            "approval_required": false
+          },
+          "sell": {
+            "route_found": true,
+            "amount_in": {
+              "atomic": "111940727109084651631567",
+              "formatted": "111940.727109084651631567"
+            },
+            "route": "kyberswap",
+            "expected_out": {
+              "atomic": "900000000000000",
+              "formatted": "0.0009"
+            },
+            "min_out": {
+              "atomic": "900000000000000",
+              "formatted": "0.0009"
+            },
+            "value_in_usd": "1.0133",
+            "value_out_usd": "0.9644",
+            "loss_pct": "4.83",
+            "gas_usd": "0.0189",
+            "fees_usd": "0.0025",
+            "approval_required": true
+          },
+          "round_trip_loss_pct": "10",
+          "sell_mark_value_usd": null,
+          "coverage": {
+            "source": "lifi",
+            "slippage": "0.005",
+            "executable": false,
+            "balances_checked": false,
+            "approvals_checked": false
+          }
+        },
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-10-01T12:00:00Z",
+          "sources": [],
+          "warnings": []
+        },
+        "error": null
+      }
+    },
+    {
+      "tool": "hoodit_check_exit",
+      "input": {
+        "token": "0x1111111111111111111111111111111111111111"
+      },
+      "output": {
+        "schema_version": "1.4.0",
+        "status": "error",
+        "data": null,
+        "meta": {
+          "chain_id": 4663,
+          "generated_at": "2026-10-01T12:00:00Z",
+          "sources": [],
+          "warnings": []
+        },
+        "error": {
+          "code": "INVALID_ARGUMENT",
+          "message": "sell requires amount in whole token units",
+          "retryable": false,
+          "retry_after_seconds": null
+        }
       }
     }
   ]
