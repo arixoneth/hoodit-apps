@@ -5,9 +5,10 @@ Hoodit is a Robinhood Chain trading assistant for token and launchpad discovery,
 ## Repository layout
 
 - `app/` and `public/` — Next.js landing page and product UI
-- `apps/hoodit/` — Rust v1.4 dynamic application loaded by Aomi; `src/tools.rs`
-  is the public facade and `src/tools/markets/` owns every read tool
-- `contracts/hoodit-v1/` — canonical JSON Schemas, examples, and independent validator
+- `apps/hoodit/` — Rust v1.5 dynamic application loaded by Aomi: `src/tools/`
+  holds the five read tools, `src/market/` decodes swaps into charts and flow,
+  `src/providers/` talks to the public data sources
+- `tests/evals/` and `scripts/hoodit-eval.py` — conversation evals run on Aomi chat
 - `docs/hoodit-v1-validation.md` — local and sanitized provider evidence, with deployment work called out separately
 - `.aomi/config.json` — Aomi Project manifest used by Build's community repository import
 - `Cargo.toml` — shared Rust workspace and backend-compatible Aomi SDK pin
@@ -46,46 +47,51 @@ origin, credential and error boundaries. Wallet signing requires separate tests.
 
 ## Aomi application
 
-The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. GeckoTerminal market data, GoPlus security evidence, and LI.FI read-only exit quotes use public keyless APIs. An optional `COINGECKO_API_KEY` (demo) or `COINGECKO_PRO_API_KEY` in Hoodit's Builder Environment routes the same market reads through CoinGecko's keyed onchain API, raising the shared 10-per-minute GeckoTerminal allowance to 30 or 250. Wallet balances come from the host's `get_erc20_holdings`. Provider credentials are delivered by the host and never exposed as tool arguments, requested from end users, or handled by the frontend relay.
+The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. Every data source is public and keyless, so the app declares no secrets:
+
+| Source | Used for |
+|---|---|
+| Robinhood Chain RPC | Charts, order flow and trading wallets, decoded from swap logs (Uniswap v2/v3/v4, PancakeSwap v3, Pons curves). Wide log ranges use the official endpoint; cheap batched reads use a faster public endpoint with the official one as fallback. |
+| DexScreener | Pool snapshots: price, liquidity, FDV, volume and buy/sell counts by window, pool age, search. |
+| GeckoTerminal | Discovery feeds and launchpad stage only, because its shared public allowance is about ten requests a minute. |
+| GoPlus | Honeypot simulation, taxes, owner powers, and labelled top holders. |
+| LI.FI | Read-only exit quotes. |
+
+Wallet balances come from the host's `get_erc20_holdings`, and trades use the host's execution flow.
 
 ```bash
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p hoodit --lib
+cargo clippy -p hoodit --lib --tests -- -D warnings
 aomi-build sdk check --path . --required-version 5.1.1
 ```
 
-The natural-language application compatibility scenario lives at `apps/hoodit/test.json`.
-The app exposes two skills: `hoodit/markets` with eight read tools and the
-instruction-only `hoodit/coin-scanner` audit playbook. The scanner activates
-with the market skill and reuses its tools rather than duplicating schemas or
-dispatch routes. All eight tools remain hidden until the market skill is
-activated. Tokens report their launchpad lifecycle (bonding-curve progress or
-graduation and destination pool), trades keep their sending wallets, and
-`hoodit_check_exit` quotes an exact-size sell or a buy-then-sell round trip.
-Wallet balances use the host's holdings tool, and actual swaps use the
-inherited host execution lifecycle.
+The app exposes one skill, `hoodit/research`, with five read tools:
+`hoodit_discover` (trending, new, Pons launchpad and volume feeds with setup
+flags), `hoodit_search`, `hoodit_get_token` (snapshot, launchpad stage,
+security), `hoodit_get_chart` (candles, structure, order flow and wallets from
+on-chain swaps) and `hoodit_check_exit`. The tools compute setup flags such as
+`extended`, `fading`, `churn` and `thin_exit`, so the model weighs a blow-off
+top as late rather than reading momentum as quality.
 
-### Research quality evaluations
+A live read-only probe runs any tool against public providers:
 
-`tests/research/stories.json` contains casual trader stories, including short
-prompts, follow-ups, identity ambiguity, stale charts, honeypots, dead pools,
-provider outages, and live research. Expected outcomes are kept away from the
-actor. A separate LLM grades the answer against the actual returned evidence,
-including whether the recommendation is justified and whether the voice works
-in chat. A good style score cannot cancel a critical factual or selection error.
+```bash
+HOODIT_TOOL=hoodit_get_chart HOODIT_ARGS='{"token":"0x..."}' \
+  cargo test -p hoodit --test live_read_smoke -- --ignored --nocapture
+```
 
-See [the research eval guide](docs/hoodit-research-evals.md) for running the
-suite, model selection, controlled versus live evidence, limitations, and
-reproducible reports. These are research component tests; the host compatibility
-scenario remains a separate check. No model weights are trained by this workflow.
+### Conversation evals
 
-The amended public schemas and synthetic fixtures live in
-`contracts/hoodit-v1/`. Validate them with
-`python3 contracts/hoodit-v1/validate_contracts.py`.
-CI also runs all nine tools against a deterministic local provider transport,
-emits their actual Rust JSON, and validates those envelopes with
-`--implementation-fixtures`. These are source-level read tests; they do not
-claim a deployment or a completed wallet transaction.
+`tests/evals/cases.json` holds casual trader conversations split into `dev`
+(used while tuning) and `holdout` (run once per release candidate, never copied
+into skills). `scripts/hoodit-eval.py` runs them as fresh guest chats against a
+deployed app with a chosen model, checks mechanics (completion, required tools,
+tool errors, no signing actions), and saves transcripts for grading the
+answers against the evidence the tools returned:
+
+```bash
+scripts/hoodit-eval.py --model gpt-6-luna --split dev --out /tmp/hoodit-eval
+```
 
 ## Connect to Aomi Build
 
