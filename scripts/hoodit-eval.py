@@ -21,9 +21,10 @@ smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
 
-def tool_calls(events: list[dict]) -> list[dict]:
-    """Tool calls in order, one entry per call, with its parsed result."""
-    calls, seen = [], set()
+def tool_calls(events: list[dict], seen: set) -> list[dict]:
+    """New tool calls in order, one entry per call, with its parsed result.
+    `seen` spans the conversation: later turns replay earlier messages."""
+    calls = []
     for event in events:
         for message in event.get("messages", []):
             name = message.get("toolName")
@@ -39,12 +40,18 @@ def tool_calls(events: list[dict]) -> list[dict]:
     return calls
 
 
-def answer(events: list[dict]) -> str:
+def answer(events: list[dict], seen: set) -> str:
     final = ""
     for event in events:
         for message in event.get("messages", []):
             if message.get("role") == "agent" and not message.get("toolName") and str(message.get("content", "")).strip():
+                if message.get("id") in seen:
+                    continue
                 final = message["content"]
+    for event in events:
+        for message in event.get("messages", []):
+            if message.get("role") == "agent" and not message.get("toolName"):
+                seen.add(message.get("id"))
     return final
 
 
@@ -73,17 +80,25 @@ def run_case(args, case: dict) -> dict:
     base = args.base.rstrip("/")
     guest = smoke.request_json(f"{base}/api/auth/widget/guest", origin=args.origin, method="POST", body={})
     token = guest["access_token"]
-    session_id, turns = None, []
+    session_id, turns, seen = None, [], set()
     for prompt in case["prompts"]:
         payload = {"applicationId": args.application_id, "message": prompt, "model": args.model}
         if session_id:
             payload["sessionId"] = session_id
         started = time.monotonic()
         try:
-            delta = smoke.normalize_delta(smoke.request_json(f"{base}/v1/agent/chat", token=token, origin=args.origin, method="POST", body=payload))
+            for attempt in range(3):
+                try:
+                    delta = smoke.normalize_delta(smoke.request_json(f"{base}/v1/agent/chat", token=token, origin=args.origin, method="POST", body=payload))
+                    break
+                except RuntimeError as error:
+                    # 409 while the platform is busy with the app (e.g. a deploy in flight).
+                    if "HTTP 409" not in str(error) or attempt == 2:
+                        raise
+                    time.sleep(30)
             session_id = delta.get("sessionId") or session_id
             _, events = smoke.settle(base, args.origin, token, delta, args.timeout, [token])
-            turns.append({"prompt": prompt, "seconds": round(time.monotonic() - started), "calls": tool_calls(events), "answer": answer(events)})
+            turns.append({"prompt": prompt, "seconds": round(time.monotonic() - started), "calls": tool_calls(events, seen), "answer": answer(events, seen)})
         except Exception as error:  # a failed turn is a result, not a crash
             turns.append({"prompt": prompt, "seconds": round(time.monotonic() - started), "calls": [], "answer": "", "error": str(error)[:500]})
             break

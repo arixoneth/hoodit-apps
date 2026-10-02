@@ -60,7 +60,6 @@ impl DynAomiTool for Discover {
         let pools: Vec<Snapshot> = pools
             .into_iter()
             .filter(|p| !is_base_asset(&p.token) && seen.insert(p.token.clone()))
-            .take(limit)
             .collect();
         let curve_tokens: Vec<String> = pools
             .iter()
@@ -82,8 +81,21 @@ impl DynAomiTool for Discover {
             }
         };
         let now = now();
+        // The launchpad page is ranked by activity; rank it by how close each
+        // curve is to graduating before trimming, so a quiet 90% curve survives.
+        let mut pools = pools;
+        if feed == "launchpad" {
+            let pct = |p: &Snapshot| {
+                progress
+                    .get(&p.token)
+                    .and_then(|l| l.progress_pct)
+                    .unwrap_or(-1.0)
+            };
+            pools.sort_by(|a, b| pct(b).total_cmp(&pct(a)));
+        }
         let coins: Vec<Value> = pools
             .iter()
+            .take(limit)
             .map(|p| row(p, progress.get(&p.token), now))
             .collect();
         let scope = match feed {

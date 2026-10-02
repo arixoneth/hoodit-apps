@@ -106,7 +106,7 @@ def normalize_delta(delta: dict) -> dict:
         "status": states[-1] if states else None,
         "messages": messages,
         "activity": [
-            {"type": event.get("type"), "state": event.get("state")}
+            {k: v for k, v in event.items() if k != "content"}
             for event in delta.get("events", [])
             if event.get("type") != "message"
         ],
@@ -154,7 +154,13 @@ def settle(base: str, origin: str, token: str, delta: dict, timeout: int, secret
             raise RuntimeError("Read-only smoke unexpectedly produced a wallet/signing action")
         observed.append(sanitize(delta, secrets))
     if delta.get("status") != "complete":
-        raise RuntimeError(f"Agent turn ended with non-complete status: {delta.get('status')}")
+        reasons = [
+            {k: v for k, v in item.items() if k in ("type", "state", "error", "reason", "code", "message", "detail")}
+            for event in observed
+            for item in event.get("activity", [])
+            if any(k in item for k in ("error", "reason", "code", "detail")) or item.get("state") == "failed"
+        ]
+        raise RuntimeError(f"Agent turn ended with non-complete status: {delta.get('status')} {json.dumps(reasons)[:600]}")
     if not any(m.get("role") == "agent" and str(m.get("content", "")).strip() for event in observed for m in event["messages"]):
         raise RuntimeError("Agent turn completed without a non-empty assistant message")
     return raw, observed

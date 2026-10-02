@@ -90,8 +90,14 @@ impl<'a> Gecko<'a> {
             .filter(|row| row.get("type").and_then(Value::as_str) == Some("pool"))
             .filter_map(|pool| snapshot(pool, &included))
             .collect::<Vec<_>>();
-        let symbol = model::string(data, &["attributes", "symbol"]).unwrap_or_default();
-        let name = model::string(data, &["attributes", "name"]).unwrap_or_default();
+        let symbol = model::label(
+            model::string(data, &["attributes", "symbol"]).unwrap_or_default(),
+            24,
+        );
+        let name = model::label(
+            model::string(data, &["attributes", "name"]).unwrap_or_default(),
+            48,
+        );
         let pools: Vec<Snapshot> = pools
             .into_iter()
             .map(|mut pool| {
@@ -224,7 +230,11 @@ pub fn snapshot(pool: &Value, included: &Map<String, Value>) -> Option<Snapshot>
             _ if address == model::USDG => "USDG".into(),
             _ => String::new(),
         };
-        Some((address, symbol, text("name")))
+        Some((
+            address,
+            model::label(symbol, 24),
+            model::label(text("name"), 48),
+        ))
     };
     let (token, symbol, name) = token_of("base_token")?;
     let (quote, quote_symbol, _) = token_of("quote_token")?;

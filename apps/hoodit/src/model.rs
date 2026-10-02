@@ -64,6 +64,16 @@ pub fn error(code: &str, message: &str, retryable: bool) -> Value {
     json!({"status":"error","error":{"code":code,"message":message,"retryable":retryable}})
 }
 
+/// Token names and symbols are attacker-controlled text; spam tokens carry
+/// names thousands of characters long. Keep them short.
+pub fn label(text: String, max: usize) -> String {
+    let text = text.trim();
+    match text.char_indices().nth(max) {
+        Some((cut, _)) => format!("{}…", &text[..cut]),
+        None => text.to_string(),
+    }
+}
+
 pub fn get<'a>(v: &'a Value, path: &[&str]) -> Option<&'a Value> {
     path.iter().try_fold(v, |v, k| v.get(*k))
 }
@@ -130,6 +140,13 @@ mod tests {
         assert!(address("0x1").is_err());
         assert!(pool_id(&format!("0x{}", "a".repeat(64))).is_ok());
         assert!(pool_id("robinhood_0x1").is_err());
+    }
+
+    #[test]
+    fn caps_spam_labels() {
+        assert_eq!(label("PEPE".into(), 24), "PEPE");
+        assert_eq!(label("币安人生币安人生".into(), 4), "币安人生…");
+        assert_eq!(label("x".repeat(5000), 48).chars().count(), 49);
     }
 
     #[test]

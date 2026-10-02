@@ -50,20 +50,28 @@ impl<'a> Dex<'a> {
             })
             .unwrap_or_default()
     }
-    /// Name or ticker search. Adding the chain name keeps other chains'
-    /// same-ticker pairs from crowding the 30-pair response.
+    /// Name or ticker search. The response is capped at 30 pairs across all
+    /// chains, so the plain query and one scoped to the chain name are merged:
+    /// each finds Robinhood pools the other misses.
     pub fn search(&self, call: &Call, query: &str) -> Result<Vec<Snapshot>, ProviderError> {
-        let scoped = self.get(
-            call,
-            "/latest/dex/search",
-            &[("q", format!("{query} {NETWORK}"))],
-        )?;
-        let mut found = snapshots(scoped.get("pairs").unwrap_or(&Value::Null));
-        if found.is_empty() {
-            let plain = self.get(call, "/latest/dex/search", &[("q", query.to_string())])?;
-            found = snapshots(plain.get("pairs").unwrap_or(&Value::Null));
+        let mut found: Vec<Snapshot> = vec![];
+        let mut last_error = None;
+        for q in [query.to_string(), format!("{query} {NETWORK}")] {
+            match self.get(call, "/latest/dex/search", &[("q", q)]) {
+                Ok(value) => {
+                    for pool in snapshots(value.get("pairs").unwrap_or(&Value::Null)) {
+                        if !found.iter().any(|f| f.pool_id == pool.pool_id) {
+                            found.push(pool);
+                        }
+                    }
+                }
+                Err(error) => last_error = Some(error),
+            }
         }
-        Ok(found)
+        match last_error {
+            Some(error) if found.is_empty() => Err(error),
+            _ => Ok(found),
+        }
     }
 }
 
@@ -117,10 +125,19 @@ pub fn snapshot(pair: &Value) -> Option<Snapshot> {
             .to_string(),
         kind,
         token,
-        symbol: model::string(pair, &["baseToken", "symbol"]).unwrap_or_default(),
-        name: model::string(pair, &["baseToken", "name"]).unwrap_or_default(),
+        symbol: model::label(
+            model::string(pair, &["baseToken", "symbol"]).unwrap_or_default(),
+            24,
+        ),
+        name: model::label(
+            model::string(pair, &["baseToken", "name"]).unwrap_or_default(),
+            48,
+        ),
         quote,
-        quote_symbol: model::string(pair, &["quoteToken", "symbol"]).unwrap_or_default(),
+        quote_symbol: model::label(
+            model::string(pair, &["quoteToken", "symbol"]).unwrap_or_default(),
+            24,
+        ),
         price_usd,
         quote_usd,
         liquidity_usd: model::number(pair, &["liquidity", "usd"]),
@@ -143,6 +160,7 @@ pub fn links(pair: &Value) -> Vec<String> {
             .into_iter()
             .flatten()
             .filter_map(|entry| model::string(entry, &["url"]))
+            .map(|url| model::label(url, 100))
             .collect::<Vec<_>>()
     };
     let mut links = urls("websites");

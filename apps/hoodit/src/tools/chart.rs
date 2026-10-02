@@ -103,20 +103,34 @@ impl DynAomiTool for GetChart {
             .first()
             .map_or(found.from_ts, |s| s.ts.max(found.from_ts));
         let span = (found.to_ts - first).max(60);
-        let (label, secs) = fixed.unwrap_or_else(|| auto_interval(span));
+        // A requested width too fine for the window widens to fit it, so the
+        // structure always describes the whole window rather than its tail.
+        let fitted = auto_interval(span);
+        let (label, secs) = match fixed {
+            Some((label, secs)) if secs >= fitted.1 => (label, secs),
+            _ => fitted,
+        };
         let mut series = candles(trades, &market, secs);
-        if series.len() > 48 {
-            series.drain(..series.len() - 48);
-            call.note(format!("only the latest 48 {label} candles are listed"));
+        if series.len() > 49 {
+            series.drain(..series.len() - 49);
         }
         let covered = one((found.to_ts - found.from_ts) as f64 / 3600.0);
-        if found.truncated {
-            call.note(format!("busy pool: candles cover the latest {covered}h ({} swaps); `earlier` samples the rest of the {hours}h", trades.len()));
-        }
         let mut out = json!({
             "token": token,
             "pool": pool_view,
-            "window": {"from": found.from_ts, "to": found.to_ts, "hours": covered, "swaps": trades.len(), "complete": !found.truncated},
+            "window": {
+                "from": found.from_ts,
+                "to": found.to_ts,
+                "hours": covered,
+                "hours_requested": hours,
+                "swaps": trades.len(),
+                "complete": !found.truncated,
+                "coverage": if found.truncated {
+                    format!("busy pool: every swap of the latest {covered}h; `earlier` samples the rest of the {hours}h")
+                } else {
+                    format!("every swap of the last {covered}h")
+                },
+            },
             "interval": label,
             "candles": rows(&series),
             "structure": structure(&series, trades, &market, now),

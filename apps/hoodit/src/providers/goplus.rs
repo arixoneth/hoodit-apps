@@ -111,7 +111,7 @@ pub fn summarize(record: &Value, token: &str) -> Value {
             row.insert("pct".into(), one(share));
             row.insert("kind".into(), json!(kind));
             if let Some(tag) = model::string(holder, &["tag"]).filter(|t| !t.is_empty()) {
-                row.insert("tag".into(), json!(tag));
+                row.insert("tag".into(), json!(model::label(tag, 32)));
             }
             top.push(Value::Object(row));
         }
