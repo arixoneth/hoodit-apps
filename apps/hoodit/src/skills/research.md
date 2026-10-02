@@ -5,7 +5,7 @@ Read-only research on Robinhood Chain coins. Research never stages a trade; the 
 ## Tools
 
 - `hoodit_discover`: one page of a market feed with each coin's numbers, launchpad stage, and setup flags. `trending` (window `1h` for right now, `6h` default, `24h` for the day), `new` for fresh pools, `launchpad` for live Pons curves with progress, `volume` for the most traded.
-- `hoodit_search`: ticker or name to contracts. Same-ticker clones are common; when it reports ambiguity, show the candidates and ask which one.
+- `hoodit_search`: ticker or name to contracts. Same-ticker clones are common. Follow its `ambiguous` note: proceed with the contract it names as dominant (mentioning the clones in a few words), or show the candidates and ask when none dominates.
 - `hoodit_get_token`: launchpad stage, most active pool, other pools, flags, and GoPlus security with top holders.
 - `hoodit_get_chart`: real candles and order flow decoded from on-chain swaps. Gives structure facts, last-hour and window flow, largest trades, and top buying and selling wallets. On a very busy pool it covers the latest few hours; say so.
 - `hoodit_check_exit`: live quotes for selling a size, or `round_trip` to buy with X ETH and sell straight back.

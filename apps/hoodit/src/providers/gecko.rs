@@ -113,6 +113,14 @@ impl<'a> Gecko<'a> {
             .iter()
             .find(|pool| pool.kind == Some("curve"))
             .map(|pool| pool.pool_id.clone());
+        // Some graduated tokens carry no launchpad record, but their pool sits
+        // on Pons' graduated DEX; trust the pool.
+        if lifecycle.stage == "none"
+            && let Some(pool) = pools.iter().find(|p| p.venue.starts_with("pons graduated"))
+        {
+            lifecycle.stage = "graduated";
+            lifecycle.destination_pool = Some(pool.pool_id.clone());
+        }
         Ok((lifecycle, pools))
     }
     /// Launchpad stage for up to 30 tokens in one request.

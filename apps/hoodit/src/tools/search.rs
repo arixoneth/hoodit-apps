@@ -64,7 +64,8 @@ fn results(pools: &[Snapshot], query: &str, now: i64) -> Value {
     for pool in pools.into_iter().filter(|p| !is_base_asset(&p.token)) {
         by_token.entry(&pool.token).or_default().push(pool.clone());
     }
-    let mut rows: Vec<(f64, Value, bool)> = by_token
+    // (24h volume, liquidity, row, exact ticker or address match)
+    let mut rows: Vec<(f64, f64, Value, bool)> = by_token
         .iter()
         .filter_map(|(token, pools)| {
             let best = main_pool(pools, token).or_else(|| pools.first())?;
@@ -83,17 +84,41 @@ fn results(pools: &[Snapshot], query: &str, now: i64) -> Value {
                 "change_24h_pct": opt(best.change.h24, one),
                 "age_h": opt(best.age_hours(now), one),
             });
-            Some((best.liquidity_usd.unwrap_or(0.0), row, exact))
+            let volume: f64 = pools.iter().filter_map(|p| p.volume.h24).sum();
+            Some((volume, best.liquidity_usd.unwrap_or(0.0), row, exact))
         })
         .collect();
-    rows.sort_by(|a, b| b.2.cmp(&a.2).then(b.0.total_cmp(&a.0)));
-    let same_ticker = rows.iter().filter(|r| r.2).count();
-    let tokens: Vec<Value> = rows.into_iter().take(8).map(|r| r.1).collect();
+    // Clones often show big but idle liquidity; trading volume says which
+    // contract the market actually means.
+    rows.sort_by(|a, b| {
+        b.3.cmp(&a.3)
+            .then(b.0.total_cmp(&a.0))
+            .then(b.1.total_cmp(&a.1))
+    });
+    let exact: Vec<&(f64, f64, Value, bool)> = rows.iter().filter(|r| r.3).collect();
+    let note = match exact.as_slice() {
+        [] | [_] => None,
+        [top, ..] => {
+            let total: f64 = exact.iter().map(|r| r.0).sum();
+            if top.0 >= 10_000.0 && top.0 >= 0.9 * total {
+                Some(format!(
+                    "{} contracts use this ticker, but {} has {:.0}% of their 24h volume; the others look like idle clones. Use it unless the user means another, and mention the clones briefly",
+                    exact.len(),
+                    top.2["token"].as_str().unwrap_or_default(),
+                    top.0 / total * 100.0
+                ))
+            } else {
+                Some(format!(
+                    "{} different contracts use this ticker and none dominates trading; confirm which one before judging it",
+                    exact.len()
+                ))
+            }
+        }
+    };
+    let tokens: Vec<Value> = rows.into_iter().take(8).map(|r| r.2).collect();
     let mut out = json!({"query": query, "tokens": tokens});
-    if same_ticker > 1 {
-        out["ambiguous"] = json!(format!(
-            "{same_ticker} different contracts use this ticker; confirm which one before judging it"
-        ));
+    if let Some(note) = note {
+        out["ambiguous"] = json!(note);
     }
     out
 }

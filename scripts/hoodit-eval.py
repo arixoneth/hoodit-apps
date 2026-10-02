@@ -41,18 +41,17 @@ def tool_calls(events: list[dict], seen: set) -> list[dict]:
 
 
 def answer(events: list[dict], seen: set) -> str:
-    final = ""
+    """Every new assistant message of the turn, in order."""
+    parts = []
     for event in events:
         for message in event.get("messages", []):
-            if message.get("role") == "agent" and not message.get("toolName") and str(message.get("content", "")).strip():
-                if message.get("id") in seen:
-                    continue
-                final = message["content"]
-    for event in events:
-        for message in event.get("messages", []):
-            if message.get("role") == "agent" and not message.get("toolName"):
+            if message.get("role") != "agent" or message.get("toolName") or message.get("id") in seen:
+                continue
+            text = str(message.get("content", "")).strip()
+            if text and not message.get("streaming"):
                 seen.add(message.get("id"))
-    return final
+                parts.append(text)
+    return "\n---\n".join(dict.fromkeys(parts))
 
 
 def check(case: dict, turns: list[dict]) -> list[str]:
