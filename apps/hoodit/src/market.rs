@@ -134,6 +134,14 @@ pub fn flags(s: &Snapshot, now: i64) -> Vec<String> {
             ));
         }
     }
+    let slippage = Slippage::of(s, false);
+    if slippage.needed_bps > SUGGESTED_MAX_BPS {
+        flags.push(format!(
+            "jumpy: needs ~{:.0}% slippage to fill through chat ({})",
+            f64::from(slippage.needed_bps) / 100.0,
+            slippage.basis
+        ));
+    }
     if s.txns_24h().is_some_and(|n| n < 20) {
         flags.push(format!(
             "quiet: {} trades in 24h",
@@ -141,6 +149,66 @@ pub fn flags(s: &Snapshot, now: i64) -> Vec<String> {
         ));
     }
     flags
+}
+
+/// Slippage Hoodit suggests without asking. Above it, only the user's explicit
+/// choice; above `MAX_SLIPPAGE_BPS`, no trade through chat.
+pub const SUGGESTED_MAX_BPS: u32 = 500;
+pub const MAX_SLIPPAGE_BPS: u32 = 1000;
+
+/// A slippage tolerance sized for chat execution: the price can move between
+/// the simulation and the wallet signature (the reply plus the user's
+/// confirmation, about one to two minutes), so the tolerance covers one
+/// typical 5-minute move, with a floor set by pool depth.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Slippage {
+    pub needed_bps: u32,
+    pub basis: String,
+}
+
+impl Slippage {
+    pub fn of(s: &Snapshot, curve: bool) -> Self {
+        let liquidity = s.liquidity_usd.unwrap_or(0.0);
+        let floor: u32 = match liquidity {
+            _ if curve => 300,
+            l if l >= 250_000.0 => 50,
+            l if l >= 50_000.0 => 100,
+            l if l >= 10_000.0 => 200,
+            _ => 300,
+        };
+        let m5 = s.change.m5.map(f64::abs).unwrap_or(0.0);
+        let h1 = s.change.h1.map(|c| c.abs() / 12f64.sqrt()).unwrap_or(0.0);
+        let move_pct = m5.max(h1);
+        // Round up to 25 bps steps so small noise doesn't change the number.
+        let drift = ((move_pct * 100.0 / 25.0).ceil() * 25.0).min(f64::from(u32::MAX)) as u32;
+        let depth = if curve {
+            "pons curve".to_string()
+        } else {
+            format!("liquidity ${liquidity:.0}")
+        };
+        Self {
+            needed_bps: floor.max(drift),
+            basis: format!("typical 5m move {move_pct:.1}%, {depth}"),
+        }
+    }
+    pub fn suggested_bps(&self) -> u32 {
+        self.needed_bps.min(SUGGESTED_MAX_BPS)
+    }
+    pub fn tradeable(&self) -> &'static str {
+        match self.needed_bps {
+            n if n <= SUGGESTED_MAX_BPS => "yes",
+            n if n <= MAX_SLIPPAGE_BPS => "only_with_explicit_ok",
+            _ => "too_volatile",
+        }
+    }
+    pub fn view(&self) -> Value {
+        json!({
+            "suggested_bps": self.suggested_bps(),
+            "needed_bps": self.needed_bps,
+            "tradeable": self.tradeable(),
+            "basis": self.basis,
+        })
+    }
 }
 
 /// Launchpad stage from GeckoTerminal's launchpad record.
@@ -301,6 +369,42 @@ mod tests {
             ..Default::default()
         };
         assert!(flags(&steady, 30 * 86_400).is_empty());
+    }
+
+    #[test]
+    fn slippage_scales_with_depth_and_recent_moves() {
+        let deep = Snapshot {
+            liquidity_usd: Some(400_000.0),
+            change: Win {
+                m5: Some(0.2),
+                h1: Some(-1.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let calm = Slippage::of(&deep, false);
+        assert_eq!((calm.suggested_bps(), calm.tradeable()), (50, "yes"));
+        assert_eq!(Slippage::of(&deep, true).needed_bps, 300);
+
+        let mut thin = deep.clone();
+        thin.liquidity_usd = Some(30_000.0);
+        thin.change.m5 = Some(-3.1);
+        let busy = Slippage::of(&thin, false);
+        assert_eq!(busy.needed_bps, 325);
+        assert_eq!(busy.basis, "typical 5m move 3.1%, liquidity $30000");
+
+        thin.change.h1 = Some(40.0);
+        let hot = Slippage::of(&thin, false);
+        assert_eq!(hot.needed_bps, 1175);
+        assert_eq!(
+            (hot.suggested_bps(), hot.tradeable()),
+            (500, "too_volatile")
+        );
+        thin.change.h1 = Some(25.0);
+        assert_eq!(
+            Slippage::of(&thin, false).tradeable(),
+            "only_with_explicit_ok"
+        );
     }
 
     #[test]

@@ -55,7 +55,7 @@ The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. Eve
 | DexScreener | Pool snapshots: price, liquidity, FDV, volume and buy/sell counts by window, pool age, search. |
 | GeckoTerminal | Discovery feeds and launchpad stage only, because its shared public allowance is about ten requests a minute. |
 | GoPlus | Honeypot simulation, taxes, owner powers, and labelled top holders. |
-| LI.FI | Read-only exit quotes. |
+| LI.FI | Read-only exit quotes at the trade's slippage tolerance. |
 
 Wallet balances come from the host's `get_erc20_holdings`, and trades use the host's execution flow.
 
@@ -72,6 +72,15 @@ security), `hoodit_get_chart` (candles, structure, order flow and wallets from
 on-chain swaps) and `hoodit_check_exit`. The tools compute setup flags such as
 `extended`, `fading`, `churn` and `thin_exit`, so the model weighs a blow-off
 top as late rather than reading momentum as quality.
+
+Trades fill a minute or two after the host simulates them, so `hoodit_get_token`
+and `hoodit_check_exit` size a slippage tolerance for that wait: one typical
+5-minute move (from DexScreener's 5m and 1h changes), floored by pool depth
+(0.5% at $250k+ liquidity up to 3% for thin pools and Pons curves). Hoodit
+suggests at most 5%, uses up to 10% only when the user explicitly agrees, and
+flags anything needing more as `too_volatile`. The skill tells the model to pass
+`slippage_bps` explicitly to the host's LI.FI tools, re-quote at the same
+tolerance after a slippage failure, and never widen it unasked.
 
 A live read-only probe runs any tool against public providers:
 

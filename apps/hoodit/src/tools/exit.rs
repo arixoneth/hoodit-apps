@@ -1,8 +1,9 @@
 use super::{arg, failure};
 use crate::amount;
 use crate::app::{Call, HooditApp};
+use crate::market::{MAX_SLIPPAGE_BPS, Slippage, main_pool};
 use crate::model::{self, one};
-use crate::providers::{lifi::Lifi, rpc::Rpc};
+use crate::providers::{dex::Dex, lifi::Lifi, rpc::Rpc};
 use aomi_sdk::schemars::JsonSchema;
 use aomi_sdk::{DynAomiTool, DynToolCallCtx};
 use num_bigint::BigUint;
@@ -39,6 +40,11 @@ pub struct ExitArgs {
     #[serde(default)]
     #[schemars(with = "String", extend("enum" = ["eth", "usdg"], "default" = "eth"))]
     pub receive: Option<String>,
+    /// Slippage tolerance in basis points (300 = 3%), 1 to 1000. Omit to use
+    /// the tolerance Hoodit suggests for this coin.
+    #[serde(default)]
+    #[schemars(with = "Option<u32>", range(min = 1, max = 1000))]
+    pub slippage_bps: Option<u32>,
     /// Optional 0x wallet the trade would come from; omit for a neutral sender.
     #[serde(default)]
     #[schemars(with = "Option<String>")]
@@ -51,7 +57,7 @@ impl DynAomiTool for CheckExit {
     type App = HooditApp;
     type Args = ExitArgs;
     const NAME: &'static str = "hoodit_check_exit";
-    const DESCRIPTION: &'static str = "Check whether a position can actually be exited at a given size with live LI.FI quotes: sell an exact token amount, or buy with an ETH amount and sell straight back (round_trip) to measure the total cost of getting in and out. Returns route, expected and minimum output, loss, and gas. Read-only: never prepares or signs a trade.";
+    const DESCRIPTION: &'static str = "Check whether a position can actually be exited at a given size with live LI.FI quotes: sell an exact token amount, or buy with an ETH amount and sell straight back (round_trip) to measure the total cost of getting in and out. Returns route, expected and minimum output at the slippage tolerance, loss, gas, and the tolerance a chat trade of this coin needs. Read-only: never prepares or signs a trade.";
 
     fn run(app: &HooditApp, args: ExitArgs, _ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = arg!(model::address(&args.token));
@@ -115,8 +121,34 @@ impl DynAomiTool for CheckExit {
                 false,
             ));
         }
+        if args
+            .slippage_bps
+            .is_some_and(|bps| !(1..=MAX_SLIPPAGE_BPS).contains(&bps))
+        {
+            return Ok(model::error(
+                "INVALID_ARGUMENT",
+                "slippage_bps must be 1 to 1000 (0.01% to 10%)",
+                false,
+            ));
+        }
         let rt = app.runtime()?;
         let mut call = Call::new(25);
+        let suggested = match Dex::new(&rt).token_pools(&call, &token) {
+            Ok(pools) => {
+                main_pool(&pools, &token).map(|p| Slippage::of(p, p.kind == Some("curve")))
+            }
+            Err(error) => {
+                call.note(format!(
+                    "slippage suggestion unavailable: {}",
+                    error.message
+                ));
+                None
+            }
+        };
+        let slippage_bps = args
+            .slippage_bps
+            .or_else(|| suggested.as_ref().map(Slippage::suggested_bps))
+            .unwrap_or(model::FALLBACK_SLIPPAGE_BPS);
         let decimals = match Rpc::new(&rt).head_and_decimals(&call, &[&token]) {
             Ok((_, _, decimals)) => decimals[0],
             Err(error) => return Ok(failure(error)),
@@ -124,7 +156,14 @@ impl DynAomiTool for CheckExit {
         let lifi = Lifi::new(&rt);
         let (buy, size) = match &eth_in {
             Some(eth_in) => {
-                match lifi.quote(&call, &sender, model::NATIVE, &token, &eth_in.to_string()) {
+                match lifi.quote(
+                    &call,
+                    &sender,
+                    model::NATIVE,
+                    &token,
+                    &eth_in.to_string(),
+                    slippage_bps,
+                ) {
                     Ok(quote) => {
                         let Some(received) = model::string(&quote, &["estimate", "toAmount"])
                             .and_then(|v| amount::atomic(&v).ok())
@@ -162,7 +201,14 @@ impl DynAomiTool for CheckExit {
                 false,
             ));
         }
-        let sell = match lifi.quote(&call, &sender, &token, receive_id, &size.to_string()) {
+        let sell = match lifi.quote(
+            &call,
+            &sender,
+            &token,
+            receive_id,
+            &size.to_string(),
+            slippage_bps,
+        ) {
             Ok(quote) => summarize(&quote, &size, decimals, receive_decimals),
             Err(error) if error.code == "NO_ROUTE" || !buy.is_null() => {
                 call.note(format!(
@@ -194,6 +240,8 @@ impl DynAomiTool for CheckExit {
                 "buy": buy,
                 "sell": sell,
                 "round_trip_loss_pct": round_trip_loss_pct,
+                "slippage_bps": slippage_bps,
+                "slippage": suggested.as_ref().map(Slippage::view),
                 "executable": false,
             }),
             call.notes,

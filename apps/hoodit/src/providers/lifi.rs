@@ -21,6 +21,7 @@ impl<'a> Lifi<'a> {
         from: &str,
         to: &str,
         amount: &str,
+        slippage_bps: u32,
     ) -> Result<Value, ProviderError> {
         if amount.is_empty() || amount.len() > 78 || !amount.bytes().all(|b| b.is_ascii_digit()) {
             return Err(ProviderError::new("BAD_REQUEST", "invalid quote amount"));
@@ -34,7 +35,10 @@ impl<'a> Lifi<'a> {
             ("fromAddress", wallet.to_string()),
             ("toAddress", wallet.to_string()),
             ("order", "RECOMMENDED".into()),
-            ("slippage", "0.005".into()),
+            (
+                "slippage",
+                format!("{}", f64::from(slippage_bps) / 10_000.0),
+            ),
         ];
         let url = format!("{}/quote", self.rt.origins.lifi);
         let mut value = fetch(

@@ -1,6 +1,6 @@
 use super::{arg, failure, now};
 use crate::app::{Call, HooditApp};
-use crate::market::{Lifecycle, Snapshot, deepest_pool, flags, main_pool};
+use crate::market::{Lifecycle, Slippage, Snapshot, deepest_pool, flags, main_pool};
 use crate::model::{self, opt, usd};
 use crate::providers::{dex::Dex, gecko::Gecko, goplus::GoPlus};
 use aomi_sdk::schemars::JsonSchema;
@@ -25,7 +25,7 @@ impl DynAomiTool for GetToken {
     type App = HooditApp;
     type Args = TokenArgs;
     const NAME: &'static str = "hoodit_get_token";
-    const DESCRIPTION: &'static str = "Snapshot one Robinhood Chain token: launchpad stage (Pons curve progress or graduation), its most active pool's price, liquidity, FDV, age, volume and buy/sell counts, other pools, setup flags, and GoPlus contract security (honeypot, taxes, owner powers, top holders). Prices are observations, not executable quotes.";
+    const DESCRIPTION: &'static str = "Snapshot one Robinhood Chain token: launchpad stage (Pons curve progress or graduation), its most active pool's price, liquidity, FDV, age, volume and buy/sell counts, other pools, setup flags, the slippage tolerance a chat trade needs, and GoPlus contract security (honeypot, taxes, owner powers, top holders). Prices are observations, not executable quotes.";
 
     fn run(app: &HooditApp, args: TokenArgs, _ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = arg!(model::address(&args.token));
@@ -128,6 +128,7 @@ impl DynAomiTool for GetToken {
             "main_pool": main.view(now),
             "other_pools": other_pools,
             "flags": flags(&main, now),
+            "slippage": Slippage::of(&main, main.kind == Some("curve")).view(),
             "security": security,
             "links": dex.token_links(&call, &token),
         });

@@ -58,6 +58,13 @@
       "expect": "Notices several PEPE contracts and asks which one, or clearly scopes to the most liquid one with its contract, without judging blindly."
     },
     {
+      "id": "slippage_for_size",
+      "split": "dev",
+      "prompts": ["what's moving hardest on robinhood chain right now? what slippage would i need to buy 0.02 eth of it"],
+      "checks": {"must_call_any": ["hoodit_get_token", "hoodit_check_exit"]},
+      "expect": "Names the mover with its contract and gives the tool's suggested slippage with its basis; calls a coin needing more than 5% explicit-only or too volatile instead of quoting a casual number, and never promises a fill."
+    },
+    {
       "id": "two_profiles",
       "split": "holdout",
       "prompts": ["give me a degen play and a safer play for today, small size"],

@@ -46,6 +46,10 @@ pub fn decimal(value: &str) -> Result<String, String> {
     }
 }
 
+/// Slippage for quotes when no pool snapshot is available: the curve and
+/// thin-pool floor, so an exit check never looks tighter than a fill can be.
+pub const FALLBACK_SLIPPAGE_BPS: u32 = 300;
+
 /// Tool success. Notes disclose gaps in coverage and mark the result partial.
 pub fn ok(mut data: Value, notes: Vec<String>) -> Value {
     if let Some(object) = data.as_object_mut() {
