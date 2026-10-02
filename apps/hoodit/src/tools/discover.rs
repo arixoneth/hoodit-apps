@@ -22,9 +22,9 @@ pub struct DiscoverArgs {
     #[serde(default)]
     #[schemars(with = "String", extend("enum" = ["5m", "1h", "6h", "24h"], "default" = "6h"))]
     pub window: Option<String>,
-    /// Coins to return, 1 to 15. Omit for 10.
+    /// Coins to return, 1 to 12. Omit for 8.
     #[serde(default)]
-    #[schemars(with = "u8", range(min = 1, max = 15), extend("default" = 10))]
+    #[schemars(with = "u8", range(min = 1, max = 12), extend("default" = 8))]
     pub limit: Option<u8>,
 }
 
@@ -48,7 +48,7 @@ impl DynAomiTool for Discover {
                 false,
             ));
         }
-        let limit = args.limit.unwrap_or(10).clamp(1, 15) as usize;
+        let limit = args.limit.unwrap_or(8).clamp(1, 12) as usize;
         let rt = app.runtime()?;
         let mut call = Call::new(20);
         let gecko = Gecko::new(&rt);

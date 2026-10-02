@@ -13,7 +13,8 @@ pub const INTERVALS: [(&str, i64); 6] = [
     ("4h", 14_400),
     ("1d", 86_400),
 ];
-const MAX_CANDLES: i64 = 48;
+/// Enough to read structure; every row costs model context on each turn.
+const MAX_CANDLES: i64 = 32;
 /// Dust trades round badly and print fake wicks; they still count as volume.
 const MIN_PRICED_USD: f64 = 1.0;
 
@@ -21,7 +22,7 @@ pub fn interval(label: &str) -> Option<i64> {
     INTERVALS.iter().find(|(l, _)| *l == label).map(|(_, s)| *s)
 }
 
-/// The finest interval that shows the span in at most 48 candles.
+/// The finest interval that shows the span in at most 32 candles.
 pub fn auto_interval(span: i64) -> (&'static str, i64) {
     INTERVALS
         .into_iter()
@@ -78,10 +79,12 @@ pub fn candles(swaps: &[Swap], market: &Market, secs: i64) -> Vec<Candle> {
     out
 }
 
-pub fn rows(candles: &[Candle]) -> Value {
+/// Candle rows timed in hours before now: the model doesn't know today's
+/// date, so absolute timestamps read as wrong.
+pub fn rows(candles: &[Candle], now: i64) -> Value {
     json!({
-        "columns": ["t", "open", "high", "low", "close", "volume_usd", "buys", "sells"],
-        "rows": candles.iter().map(|c| json!([c.t, sig(c.o), sig(c.h), sig(c.l), sig(c.c), usd(c.volume), c.buys, c.sells])).collect::<Vec<_>>()
+        "columns": ["hours_ago", "open", "high", "low", "close", "volume_usd"],
+        "rows": candles.iter().map(|c| json!([one((now - c.t) as f64 / 3600.0), sig(c.o), sig(c.h), sig(c.l), sig(c.c), usd(c.volume)])).collect::<Vec<_>>()
     })
 }
 
@@ -174,8 +177,8 @@ pub fn earlier(points: &[(i64, f64)], candles: &[Candle], lookback_ts: i64, now:
     let start = points.first().map(|p| p.1).unwrap_or(candles[0].o);
     let ago = |t: i64| one((now - t) as f64 / 3600.0);
     json!({
-        "from": lookback_ts,
-        "points": points.iter().map(|(t, p)| json!([t, sig(*p)])).collect::<Vec<_>>(),
+        "hours": one((now - lookback_ts) as f64 / 3600.0),
+        "points_hours_ago_price": points.iter().map(|(t, p)| json!([one((now - t) as f64 / 3600.0), sig(*p)])).collect::<Vec<_>>(),
         "lookback_high": sig(high.1),
         "lookback_high_hours_ago": ago(high.0),
         "from_lookback_high_pct": one((last / high.1 - 1.0) * 100.0),
@@ -244,8 +247,8 @@ pub fn flow(swaps: &[Swap], market: &Market, now: i64) -> Value {
         let mut side: Vec<&Swap> = swaps.iter().filter(|s| s.buy == buy).collect();
         side.sort_by(|a, b| b.usd(market).total_cmp(&a.usd(market)));
         side.iter()
-            .take(3)
-            .map(|s| json!({"usd":usd(s.usd(market)),"minutes_ago":(now - s.ts) / 60,"wallet":s.wallet,"tx":s.tx}))
+            .take(2)
+            .map(|s| json!({"usd":usd(s.usd(market)),"minutes_ago":(now - s.ts) / 60,"wallet":s.wallet}))
             .collect::<Vec<_>>()
     };
     let top = |sell: bool| {
@@ -369,6 +372,7 @@ mod tests {
             json!(90.0)
         );
         assert_eq!(f["largest_sells"][0]["usd"], json!(600));
+        assert_eq!(f["largest_sells"].as_array().unwrap().len(), 2);
         let picks = wallet_picks(&swaps, &m);
         assert_eq!(picks, vec![0, 1, 2, 3]);
     }
@@ -376,8 +380,8 @@ mod tests {
     #[test]
     fn picks_an_interval_for_the_span() {
         assert_eq!(auto_interval(3600).0, "5m");
-        assert_eq!(auto_interval(12 * 3600).0, "15m");
-        assert_eq!(auto_interval(40 * 3600).0, "1h");
-        assert_eq!(auto_interval(6 * 86_400).0, "4h");
+        assert_eq!(auto_interval(8 * 3600).0, "15m");
+        assert_eq!(auto_interval(24 * 3600).0, "1h");
+        assert_eq!(auto_interval(5 * 86_400).0, "4h");
     }
 }

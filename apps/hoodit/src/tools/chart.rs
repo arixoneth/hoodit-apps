@@ -33,9 +33,10 @@ pub struct ChartArgs {
     #[serde(default)]
     #[schemars(with = "String", extend("enum" = ["1m", "5m", "15m", "1h", "4h", "1d"]))]
     pub interval: Option<String>,
-    /// Latest individual trades to list, 0 to 20. Omit for 0.
+    /// Latest individual trades to list, 0 to 10. Omit for 0; flow already
+    /// summarizes them.
     #[serde(default)]
-    #[schemars(with = "u8", range(min = 0, max = 20), extend("default" = 0))]
+    #[schemars(with = "u8", range(min = 0, max = 10), extend("default" = 0))]
     pub recent_trades: Option<u8>,
 }
 
@@ -111,16 +112,14 @@ impl DynAomiTool for GetChart {
             _ => fitted,
         };
         let mut series = candles(trades, &market, secs);
-        if series.len() > 49 {
-            series.drain(..series.len() - 49);
+        if series.len() > 33 {
+            series.drain(..series.len() - 33);
         }
         let covered = one((found.to_ts - found.from_ts) as f64 / 3600.0);
         let mut out = json!({
             "token": token,
             "pool": pool_view,
             "window": {
-                "from": found.from_ts,
-                "to": found.to_ts,
                 "hours": covered,
                 "hours_requested": hours,
                 "swaps": trades.len(),
@@ -132,7 +131,7 @@ impl DynAomiTool for GetChart {
                 },
             },
             "interval": label,
-            "candles": rows(&series),
+            "candles": rows(&series, now),
             "structure": structure(&series, trades, &market, now),
             "flow": flow(trades, &market, now),
             "pricing": pricing(&rt, &mut call, &market, &pool),
@@ -140,13 +139,13 @@ impl DynAomiTool for GetChart {
         if found.truncated && !found.context.is_empty() {
             out["earlier"] = earlier(&found.context, &series, found.lookback_ts, now);
         }
-        let recent = args.recent_trades.unwrap_or(0).min(20) as usize;
+        let recent = args.recent_trades.unwrap_or(0).min(10) as usize;
         if recent > 0 {
             out["recent_trades"] = trades
                 .iter()
                 .rev()
                 .take(recent)
-                .map(|s| json!({"side": if s.buy {"buy"} else {"sell"}, "usd": usd(s.usd(&market)), "price_usd": sig(s.price_usd(&market)), "minutes_ago": (now - s.ts) / 60, "wallet": s.wallet, "tx": s.tx}))
+                .map(|s| json!({"side": if s.buy {"buy"} else {"sell"}, "usd": usd(s.usd(&market)), "price_usd": sig(s.price_usd(&market)), "minutes_ago": (now - s.ts) / 60, "wallet": s.wallet}))
                 .collect();
         }
         Ok(model::ok(out, call.notes))
