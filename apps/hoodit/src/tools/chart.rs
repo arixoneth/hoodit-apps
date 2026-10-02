@@ -126,7 +126,7 @@ impl DynAomiTool for GetChart {
                 "swaps": trades.len(),
                 "complete": !found.truncated,
                 "coverage": if found.truncated {
-                    format!("busy pool: every swap of the latest {covered}h; `earlier` samples the rest of the {hours}h")
+                    format!("busy pool: candles and structure cover only the latest {covered}h; `earlier` samples the full {hours}h and has the change, high and low over it")
                 } else {
                     format!("every swap of the last {covered}h")
                 },
@@ -135,7 +135,7 @@ impl DynAomiTool for GetChart {
             "candles": rows(&series),
             "structure": structure(&series, trades, &market, now),
             "flow": flow(trades, &market, now),
-            "pricing": format!("USD at the current {} price of ${}", if market.quote == model::USDG { "USDG" } else { "ETH" }, usd(market.quote_usd)),
+            "pricing": pricing(&rt, &mut call, &market, &pool),
         });
         if found.truncated && !found.context.is_empty() {
             out["earlier"] = earlier(&found.context, &series, found.lookback_ts, now);
@@ -150,6 +150,40 @@ impl DynAomiTool for GetChart {
                 .collect();
         }
         Ok(model::ok(out, call.notes))
+    }
+}
+
+/// How candle prices relate to USD. Trades are converted at the quote's
+/// current price, which is exact for USDG, close for ETH, and misleading for
+/// a volatile quote token, so that case carries the quote's own moves.
+fn pricing(rt: &Runtime, call: &mut Call, market: &Market, pool: &Snapshot) -> Value {
+    let quote_symbol = if pool.token == market.token {
+        &pool.quote_symbol
+    } else {
+        &pool.symbol
+    };
+    match market.quote.as_str() {
+        model::USDG => json!("USD (USDG pool)"),
+        model::WETH | model::NATIVE => json!(format!(
+            "USD at the current ETH price of ${}",
+            usd(market.quote_usd)
+        )),
+        quote => {
+            call.note(format!(
+                "this pool trades against {quote_symbol}, not ETH or USDG: candles are {quote_symbol} prices converted at today's rate, so their moves include {quote_symbol}'s own moves"
+            ));
+            let moves = Dex::new(rt)
+                .token_pools(call, quote)
+                .ok()
+                .and_then(|pools| main_pool(&pools, quote).map(|p| p.change))
+                .map(|c| json!({"h1": c.h1.map(one), "h6": c.h6.map(one), "h24": c.h24.map(one)}));
+            json!({
+                "quote": quote_symbol,
+                "converted_at_usd": sig(market.quote_usd),
+                "quote_change_pct": moves,
+                "read": "USD change of the token ≈ candle change combined with the quote's change; prefer the snapshot's change_pct for USD moves"
+            })
+        }
     }
 }
 

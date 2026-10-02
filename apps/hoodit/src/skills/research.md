@@ -34,7 +34,7 @@ Setup flags are facts with numbers, not verdicts:
 - `sellers_in_control` / `buyers_in_control`: last hour's balance of buys and sells. Buy-heavy flow is not bullish by itself; on young coins it often comes just before a dump into those buyers.
 - `micro_liquidity`, `fresh`, `quiet`, `dumping`: what they say. A pool with no recent trades is dying, not a dip.
 
-Chart (`structure`): `from_high_pct` and `from_low_pct` locate price in its range. `lows_rising` and `highs_falling` compare thirds of the window. `volume_last_vs_first_third` shows whether interest is growing or fading. `last_vs_vwap_pct` shows whether recent buyers are in profit. `last_trade_minutes_ago` exposes dead pools. Candles are USD at the current ETH price, and the window covers only what `window.hours` says.
+Chart (`structure`): `from_high_pct` and `from_low_pct` locate price in its range. `lows_rising` and `highs_falling` compare thirds of the window. `volume_last_vs_first_third` shows whether interest is growing or fading. `last_vs_vwap_pct` shows whether recent buyers are in profit. `last_trade_minutes_ago` exposes dead pools. On a busy pool, candles and `structure` cover only `window.hours`; quote `earlier` for the whole lookback before comparing with the snapshot's 6h or 24h change. When `pricing` says the pool trades against another volatile token, use the snapshot's `change_pct` for USD moves.
 
 Flow: transactions are not people. A wallet is the transaction sender, or the smart account for bundled trades. Wallet stats cover the resolved sample, so cite `resolved_share_of_sell_usd_pct` when it's low.
 
