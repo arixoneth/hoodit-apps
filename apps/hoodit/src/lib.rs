@@ -1,46 +1,39 @@
 use aomi_sdk::*;
 mod amount;
 pub mod app;
+pub mod market;
 mod model;
 mod providers;
 pub mod tools;
 
 const PREAMBLE: &str = include_str!("preamble.md");
 dyn_aomi_app!(
-    app = app::HooditApp, name = "hoodit", version = "1.4.0", preamble = PREAMBLE,
+    app = app::HooditApp, name = "hoodit", version = "1.5.0", preamble = PREAMBLE,
     tools = [], secrets = [], namespaces = ["aomi-core", "evm-core"],
     skills = [
-        { id: "hoodit/markets", description: "Research Robinhood Chain token identity, launchpad bonding-curve progress and graduation, security and ownership evidence, pool discovery and comparison, prices, liquidity, candles, public trades with their wallets, and exact-size exit quotes", tags: ["markets", "tokens", "launchpad", "pons", "security", "pools", "research", "discovery", "exit"], tools: [tools::SearchTokens, tools::DiscoverPools, tools::GetToken, tools::GetTokenPools, tools::GetMarketOptions, tools::GetCandles, tools::GetTrades, tools::CheckExit], sections: { instructions: "skills/markets.md" }, },
-        { id: "hoodit/coin-scanner", description: "Find a play, a coin to ape or watch, a fresh Pons launch, audit a bag, judge a comeback, or give an opinion on a ticker or contract. Investigate Robinhood Chain candidates using curve or graduation stage, charts, contract and exit risk, holders, liquidity, and who is trading; activate hoodit/coin-scanner and hoodit/markets together in the same call", tags: ["coin scanner", "coin audit", "token audit", "pick", "suggestions", "launchpad", "chart patterns", "honeypot", "holders", "risk"], sections: { instructions: "skills/coin-scanner.md" }, },
+        { id: "hoodit/research", description: "Find, check, and judge Robinhood Chain coins: what to ape or watch, fresh Pons launches and curves near graduation, opinions on a ticker or contract, real charts and order flow from on-chain swaps, who is buying or dumping, contract and holder risk, and whether a size can actually be exited", tags: ["markets", "coins", "scanner", "launchpad", "pons", "chart", "flow", "security", "exit"], tools: [tools::Discover, tools::Search, tools::GetToken, tools::GetChart, tools::CheckExit], sections: { instructions: "skills/research.md" }, },
     ],
 );
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+
     #[test]
-    fn manifest_has_only_skill_owned_v1_tools() {
+    fn manifest_has_one_skill_owning_five_read_tools() {
         let manifest = app::HooditApp::default().manifest();
-        assert_eq!(manifest.version, "1.4.0");
-        assert_eq!(manifest.skills.len(), 2);
-        assert_eq!(manifest.tools.len(), 8);
-        let names = manifest
-            .tools
-            .iter()
-            .map(|t| t.name.as_str())
-            .collect::<HashSet<_>>();
-        assert_eq!(names.len(), 8);
-        assert!(names.contains("hoodit_check_exit"));
-        assert!(
-            !names
-                .iter()
-                .any(|n| n.contains("portfolio") || n.contains("holding"))
-        );
-        assert!(
-            !names
-                .iter()
-                .any(|n| n.contains("stock") || n.contains("probe"))
+        assert_eq!(manifest.version, "1.5.0");
+        assert_eq!(manifest.skills.len(), 1);
+        let names: Vec<&str> = manifest.tools.iter().map(|t| t.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "hoodit_discover",
+                "hoodit_search",
+                "hoodit_get_token",
+                "hoodit_get_chart",
+                "hoodit_check_exit"
+            ]
         );
         assert!(
             manifest
@@ -49,32 +42,18 @@ mod tests {
                 .all(|t| t.parameters_schema["additionalProperties"] == false)
         );
         assert!(manifest.secrets.as_ref().is_none_or(Vec::is_empty));
-        for forbidden in [
-            "hoodit_",
-            "GeckoTerminal",
-            "LI.FI",
-            "cursor",
-            "basis points",
-            "activate",
-        ] {
+        for leaked in ["hoodit_", "GeckoTerminal", "DexScreener", "LI.FI"] {
             assert!(
-                !manifest.preamble.contains(forbidden),
-                "tool-specific guidance leaked into preamble: {forbidden}"
+                !manifest.preamble.contains(leaked),
+                "tool detail leaked into preamble: {leaked}"
             );
         }
-        assert!(manifest.preamble.contains("operator-managed"));
-        assert!(manifest.preamble.contains("host authorization"));
-        let scanner = manifest
-            .skills
-            .iter()
-            .find(|skill| skill.id == "hoodit/coin-scanner")
-            .expect("coin scanner skill is registered");
-        assert!(scanner.injected_tools.is_empty());
+        let skill = &manifest.skills[0];
         assert!(
-            scanner
+            skill
                 .sections
                 .iter()
-                .any(|section| section.content.contains("hoodit_get_candles"))
+                .any(|s| s.content.contains("hoodit_get_chart"))
         );
     }
 }

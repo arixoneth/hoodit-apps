@@ -1,946 +1,270 @@
-use crate::app::{ReadContext, Runtime};
-use crate::model::{self, NETWORK};
-use aomi_sdk::DynToolCallCtx;
+//! Keyless public data sources. Every request is cached, rate-budgeted per
+//! provider, and bounded by the calling tool's deadline.
+
+use crate::app::{Call, Runtime};
 use reqwest::{StatusCode, header::RETRY_AFTER};
-use serde_json::{Map, Value, json};
-use std::hash::{DefaultHasher, Hash, Hasher};
+use serde_json::Value;
 use std::time::Duration;
 
-#[allow(clippy::too_many_arguments)]
-fn get(
-    runtime: &Runtime,
-    provider: &'static str,
-    base: &str,
-    path: &str,
-    query: &[(String, String)],
-    headers: &[(&str, &str)],
-    ttl: Duration,
-    credential: Option<&str>,
-    read: &mut ReadContext,
-) -> Result<Value, ProviderError> {
-    let cache_key = cache_key(provider, path, query, credential);
-    if let Some((value, fetched_at)) = runtime.cached(&cache_key, read.refresh) {
-        read.source(provider, path, fetched_at, true);
-        return Ok(value);
-    }
-    for attempt in 0..2 {
-        let Some(remaining) = read.remaining() else {
-            return Err(ProviderError {
-                code: "DEADLINE_EXCEEDED",
-                message: "provider request deadline exceeded".into(),
-                retryable: true,
-            });
-        };
-        if !read.spend(provider) {
-            return Err(ProviderError {
-                code: if provider == "lifi" {
-                    "QUOTE_BUDGET_EXHAUSTED"
-                } else {
-                    "PROVIDER_BUDGET_EXHAUSTED"
-                },
-                message: "provider request budget exhausted".into(),
-                retryable: false,
-            });
-        }
-        if runtime.spend_rate(provider, credential).is_some() {
-            return Err(ProviderError {
-                code: "RATE_LIMITED",
-                message: "provider rate limit reached".into(),
-                retryable: true,
-            });
-        }
-        let mut request = runtime.http.get(format!("{base}{path}")).query(query);
-        for (name, value) in headers {
-            request = request.header(*name, *value);
-        }
-        let response = match request
-            .timeout(remaining.min(Duration::from_secs(10)))
-            .send()
-        {
-            Ok(response) => response,
-            Err(_) if attempt == 0 && read.remaining().is_some() => continue,
-            Err(_) => return Err(ProviderError::unavailable("provider request failed")),
-        };
-        let status = response.status();
-        if (status.is_server_error() || status == StatusCode::TOO_MANY_REQUESTS) && attempt == 0 {
-            let delay = retry_delay(
-                response
-                    .headers()
-                    .get(RETRY_AFTER)
-                    .and_then(|h| h.to_str().ok()),
-            );
-            if read.remaining().is_some_and(|remaining| delay < remaining) {
-                std::thread::sleep(delay);
-                continue;
-            }
-        }
-        if !status.is_success() {
-            let body = response.json::<Value>().ok();
-            return Err(ProviderError::status(status, provider, body.as_ref()));
-        }
-        let value = response
-            .json::<Value>()
-            .map_err(|_| ProviderError::schema("provider returned invalid JSON"))?;
-        let fetched_at = runtime.cache(cache_key.clone(), value.clone(), ttl);
-        read.source(provider, path, fetched_at, false);
-        return Ok(value);
-    }
-    Err(ProviderError::unavailable("provider request failed"))
-}
-
-fn cache_key(
-    provider: &str,
-    path: &str,
-    query: &[(String, String)],
-    credential: Option<&str>,
-) -> String {
-    let mut hasher = DefaultHasher::new();
-    credential.unwrap_or("").hash(&mut hasher);
-    let scope = hasher.finish();
-    let public_query: Vec<_> = query.iter().filter(|(key, _)| key != "apikey").collect();
-    format!("{provider}:{scope:016x}:{path}:{public_query:?}")
-}
-
-fn retry_delay(value: Option<&str>) -> Duration {
-    if let Some(seconds) = value.and_then(|v| v.parse::<u64>().ok()) {
-        return Duration::from_secs(seconds.min(3600));
-    }
-    if let Some(when) = value.and_then(|value| chrono::DateTime::parse_from_rfc2822(value).ok()) {
-        let seconds = (when.with_timezone(&chrono::Utc) - chrono::Utc::now())
-            .num_seconds()
-            .max(0) as u64;
-        return Duration::from_secs(seconds.min(3600));
-    }
-    Duration::from_millis(200)
-}
+pub mod dex;
+pub mod gecko;
+pub mod goplus;
+pub mod lifi;
+pub mod rpc;
 
 #[derive(Debug)]
 pub struct ProviderError {
     pub code: &'static str,
     pub message: String,
-    pub retryable: bool,
 }
 impl ProviderError {
-    fn unavailable(message: &str) -> Self {
-        Self {
-            code: "UPSTREAM_UNAVAILABLE",
-            message: message.into(),
-            retryable: true,
-        }
-    }
-    fn schema(message: &str) -> Self {
-        Self {
-            code: "UPSTREAM_SCHEMA_CHANGED",
-            message: message.into(),
-            retryable: false,
-        }
-    }
-    fn status(status: StatusCode, provider: &str, body: Option<&Value>) -> Self {
-        let no_route = provider == "lifi"
-            && body
-                .and_then(|value| value.get("code"))
-                .is_some_and(|code| {
-                    code.as_u64() == Some(1002)
-                        || code.as_str().is_some_and(|code| {
-                            matches!(code, "NO_QUOTE" | "NO_ROUTE" | "NoQuoteError")
-                        })
-                });
-        if no_route {
-            return Self {
-                code: "NOT_INDEXED",
-                message: "LI.FI found no route".into(),
-                retryable: false,
-            };
-        }
-        let (code, message, retryable) = if status == StatusCode::TOO_MANY_REQUESTS {
-            ("RATE_LIMITED", "provider rate limit reached", true)
-        } else if status == StatusCode::NOT_FOUND {
-            (
-                "UPSTREAM_NOT_FOUND",
-                "provider resource was not found",
-                false,
-            )
-        } else if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
-            (
-                "UPSTREAM_UNAVAILABLE",
-                "provider authentication failed",
-                false,
-            )
-        } else {
-            (
-                "UPSTREAM_UNAVAILABLE",
-                "provider request was unsuccessful",
-                status.is_server_error(),
-            )
-        };
+    pub(crate) fn new(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),
-            retryable,
         }
     }
-}
-
-fn address_segment(value: &str) -> Result<String, ProviderError> {
-    model::address(value)
-        .map_err(|_| ProviderError::schema("invalid address passed to provider adapter"))
-}
-
-fn pool_segment(value: &str) -> Result<String, ProviderError> {
-    let value = value.trim();
-    if (1..=200).contains(&value.len())
-        && value
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'_' | b'-'))
-    {
-        Ok(value.to_string())
-    } else {
-        Err(ProviderError::schema(
-            "invalid pool identifier passed to provider adapter",
-        ))
+    pub fn retryable(&self) -> bool {
+        matches!(self.code, "RATE_LIMITED" | "UNAVAILABLE" | "DEADLINE")
     }
 }
 
-fn not_found(
-    result: Result<Value, ProviderError>,
-    code: &'static str,
-    message: &'static str,
+pub(crate) enum Body<'a> {
+    Get(&'a [(&'a str, String)]),
+    Post(&'a Value),
+}
+
+fn display(provider: &str) -> &str {
+    match provider {
+        "dexscreener" => "DexScreener",
+        "geckoterminal" => "GeckoTerminal",
+        "goplus" => "GoPlus",
+        "rpc" | "rpc-fast" => "Robinhood RPC",
+        "lifi" => "LI.FI",
+        other => other,
+    }
+}
+
+/// One JSON request. `cost` counts batched RPC calls against the allowance;
+/// `ttl` of None skips the cache.
+pub(crate) fn fetch(
+    rt: &Runtime,
+    call: &Call,
+    provider: &'static str,
+    url: &str,
+    body: Body,
+    cost: u32,
+    ttl: Option<Duration>,
 ) -> Result<Value, ProviderError> {
-    result.map_err(|error| {
-        if error.code == "UPSTREAM_NOT_FOUND" {
-            ProviderError {
-                code,
-                message: message.into(),
-                retryable: false,
+    let name = display(provider);
+    let key = match &body {
+        Body::Get(query) => format!("{provider}|{url}|{query:?}"),
+        Body::Post(value) => format!("{provider}|{url}|{value}"),
+    };
+    if ttl.is_some()
+        && let Some(value) = rt.cached(&key)
+    {
+        return Ok(value);
+    }
+    for attempt in 0..2 {
+        let Some(remaining) = call.remaining() else {
+            return Err(ProviderError::new(
+                "DEADLINE",
+                format!("ran out of time before {name} answered"),
+            ));
+        };
+        if !rt.take(provider, cost) {
+            return Err(ProviderError::new(
+                "RATE_LIMITED",
+                format!("{name} request allowance is used up for now"),
+            ));
+        }
+        let request = match &body {
+            Body::Get(query) => rt.http.get(url).query(query),
+            Body::Post(value) => rt.http.post(url).json(value),
+        };
+        let started = std::time::Instant::now();
+        let sent = request
+            .timeout(remaining.min(Duration::from_secs(12)))
+            .send();
+        if std::env::var_os("HOODIT_DEBUG").is_some() {
+            let what = match &body {
+                Body::Post(v) => v
+                    .get("method")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| format!("batch x{cost}")),
+                Body::Get(_) => url
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("")
+                    .chars()
+                    .take(30)
+                    .collect(),
+            };
+            eprintln!(
+                "  {name} {what}: {:?} {:?}",
+                started.elapsed(),
+                sent.as_ref().map(|r| r.status().as_u16())
+            );
+        }
+        let response = match sent {
+            Ok(response) => response,
+            Err(_) if attempt == 0 => continue,
+            Err(_) => {
+                return Err(ProviderError::new(
+                    "UNAVAILABLE",
+                    format!("{name} did not respond"),
+                ));
             }
-        } else {
-            error
+        };
+        let status = response.status();
+        if status == StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+            let delay = retry_after(
+                response
+                    .headers()
+                    .get(RETRY_AFTER)
+                    .and_then(|v| v.to_str().ok()),
+            );
+            if attempt == 0
+                && delay <= Duration::from_secs(2)
+                && call
+                    .remaining()
+                    .is_some_and(|left| left > delay + Duration::from_secs(2))
+            {
+                std::thread::sleep(delay);
+                continue;
+            }
+            return Err(if status == StatusCode::TOO_MANY_REQUESTS {
+                ProviderError::new("RATE_LIMITED", format!("{name} is rate limiting us"))
+            } else {
+                ProviderError::new("UNAVAILABLE", format!("{name} returned {status}"))
+            });
         }
+        if !status.is_success() {
+            let body = response.json::<Value>().ok();
+            if provider == "lifi" && body.as_ref().is_some_and(no_route) {
+                return Err(ProviderError::new(
+                    "NO_ROUTE",
+                    "LI.FI found no route at this size",
+                ));
+            }
+            return Err(if status == StatusCode::NOT_FOUND {
+                ProviderError::new("NOT_FOUND", format!("{name} has no record of this"))
+            } else {
+                ProviderError::new("UNAVAILABLE", format!("{name} returned {status}"))
+            });
+        }
+        let value = response.json::<Value>().map_err(|_| {
+            ProviderError::new("BAD_RESPONSE", format!("{name} returned unreadable data"))
+        })?;
+        if let Some(ttl) = ttl {
+            rt.store(key, value.clone(), ttl);
+        }
+        return Ok(value);
+    }
+    Err(ProviderError::new(
+        "UNAVAILABLE",
+        format!("{name} did not respond"),
+    ))
+}
+
+fn no_route(body: &Value) -> bool {
+    body.get("code").is_some_and(|code| {
+        code.as_u64() == Some(1002)
+            || code
+                .as_str()
+                .is_some_and(|c| matches!(c, "NO_QUOTE" | "NO_ROUTE" | "NoQuoteError"))
     })
 }
 
-/// GeckoTerminal market data. With an operator-configured CoinGecko key the
-/// same onchain endpoints are read through CoinGecko's keyed API, which has a
-/// higher allowance than the shared public GeckoTerminal limit.
-pub struct Gecko<'a> {
-    runtime: &'a Runtime,
-    base: String,
-    key: Option<(&'static str, String)>,
-}
-impl<'a> Gecko<'a> {
-    pub fn new(runtime: &'a Runtime, ctx: &DynToolCallCtx) -> Self {
-        let secret = |name: &str| {
-            ctx.secrets
-                .get(name)
-                .map(|value| value.trim().to_string())
-                .filter(|value| !value.is_empty())
-        };
-        match (secret("COINGECKO_PRO_API_KEY"), secret("COINGECKO_API_KEY")) {
-            (Some(key), _) => Self {
-                runtime,
-                base: format!("{}/onchain", runtime.origins.coingecko_pro),
-                key: Some(("x-cg-pro-api-key", key)),
-            },
-            (None, Some(key)) => Self {
-                runtime,
-                base: format!("{}/onchain", runtime.origins.coingecko),
-                key: Some(("x-cg-demo-api-key", key)),
-            },
-            (None, None) => Self {
-                runtime,
-                base: runtime.origins.gecko.clone(),
-                key: None,
-            },
-        }
-    }
-    fn get(
-        &self,
-        path: &str,
-        query: &[(String, String)],
-        ttl: Duration,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let headers = self
-            .key
-            .as_ref()
-            .map(|(name, key)| vec![(*name, key.as_str())])
-            .unwrap_or_default();
-        get(
-            self.runtime,
-            "geckoterminal",
-            &self.base,
-            path,
-            query,
-            &headers,
-            ttl,
-            self.key
-                .as_ref()
-                .map(|(name, key)| {
-                    if *name == "x-cg-pro-api-key" {
-                        format!("pro:{key}")
-                    } else {
-                        key.clone()
-                    }
-                })
-                .as_deref(),
-            read,
-        )
-    }
-    pub fn search(
-        &self,
-        query: &str,
-        page: u8,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        self.get(
-            "/search/pools",
-            &[
-                ("network".into(), NETWORK.into()),
-                ("query".into(), query.into()),
-                ("page".into(), page.to_string()),
-                ("include".into(), "base_token,quote_token,dex".into()),
-            ],
-            Duration::from_secs(20),
-            read,
-        )
-    }
-    pub fn discover(
-        &self,
-        feed: &str,
-        duration: &str,
-        page: u8,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let (path, mut query) = match feed {
-            "new" => (format!("/networks/{NETWORK}/new_pools"), vec![]),
-            "top_volume" => (
-                format!("/networks/{NETWORK}/pools"),
-                vec![("sort".into(), "h24_volume_usd_desc".into())],
-            ),
-            "top_activity" => (
-                format!("/networks/{NETWORK}/pools"),
-                vec![("sort".into(), "h24_tx_count_desc".into())],
-            ),
-            _ => (
-                format!("/networks/{NETWORK}/trending_pools"),
-                vec![("duration".into(), duration.into())],
-            ),
-        };
-        query.extend([
-            ("page".into(), page.to_string()),
-            ("include".into(), "base_token,quote_token,dex".into()),
-        ]);
-        self.get(&path, &query, Duration::from_secs(20), read)
-    }
-    pub fn token(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        let token = address_segment(token)?;
-        not_found(
-            self.get(
-                &format!("/networks/{NETWORK}/tokens/{token}"),
-                &[("include".into(), "top_pools".into())],
-                Duration::from_secs(20),
-                read,
-            ),
-            "TOKEN_NOT_INDEXED",
-            "token is not indexed",
-        )
-    }
-    /// Up to 30 exact tokens in one request; used for lifecycle annotation.
-    pub fn tokens(
-        &self,
-        tokens: &[String],
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        if tokens.is_empty() || tokens.len() > 30 {
-            return Err(ProviderError::schema(
-                "token batch must contain 1 to 30 addresses",
-            ));
-        }
-        let addresses = tokens
-            .iter()
-            .map(|token| address_segment(token))
-            .collect::<Result<Vec<_>, _>>()?
-            .join(",");
-        self.get(
-            &format!("/networks/{NETWORK}/tokens/multi/{addresses}"),
-            &[],
-            Duration::from_secs(20),
-            read,
-        )
-    }
-    pub fn token_pools(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        self.token_pools_page(token, 1, read)
-    }
-    pub fn token_pools_page(
-        &self,
-        token: &str,
-        page: u8,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let token = address_segment(token)?;
-        not_found(
-            self.get(
-                &format!("/networks/{NETWORK}/tokens/{token}/pools"),
-                &[
-                    ("include".into(), "base_token,quote_token,dex".into()),
-                    ("page".into(), page.to_string()),
-                ],
-                Duration::from_secs(20),
-                read,
-            ),
-            "NO_INDEXED_POOL",
-            "no indexed pool was found",
-        )
-    }
-    pub fn pool(&self, pool: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        let pool = pool_segment(pool)?;
-        not_found(
-            self.get(
-                &format!("/networks/{NETWORK}/pools/{pool}"),
-                &[("include".into(), "base_token,quote_token,dex".into())],
-                Duration::from_secs(20),
-                read,
-            ),
-            "POOL_NOT_FOUND",
-            "pool was not found",
-        )
-    }
-    pub fn metadata(&self, token: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        let token = address_segment(token)?;
-        self.get(
-            &format!("/networks/{NETWORK}/tokens/{token}/info"),
-            &[],
-            Duration::from_secs(60),
-            read,
-        )
-    }
-    pub fn pool_info(&self, pool: &str, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        let pool = pool_segment(pool)?;
-        self.get(
-            &format!("/networks/{NETWORK}/pools/{pool}/info"),
-            &[("include".into(), "pool".into())],
-            Duration::from_secs(60),
-            read,
-        )
-    }
-    pub fn dexes(&self, read: &mut ReadContext) -> Result<Value, ProviderError> {
-        self.get(
-            &format!("/networks/{NETWORK}/dexes"),
-            &[],
-            Duration::from_secs(300),
-            read,
-        )
-    }
-    #[allow(clippy::too_many_arguments)]
-    pub fn candles(
-        &self,
-        pool: &str,
-        token: &str,
-        timeframe: &str,
-        aggregate: u8,
-        before: i64,
-        limit: u16,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let pool = pool_segment(pool)?;
-        self.get(
-            &format!("/networks/{NETWORK}/pools/{pool}/ohlcv/{timeframe}"),
-            &[
-                ("aggregate".into(), aggregate.to_string()),
-                ("before_timestamp".into(), before.to_string()),
-                ("limit".into(), limit.to_string()),
-                ("currency".into(), "usd".into()),
-                ("token".into(), token.into()),
-                ("include_empty_intervals".into(), "false".into()),
-            ],
-            Duration::from_secs(60),
-            read,
-        )
-    }
-    pub fn trades(
-        &self,
-        pool: &str,
-        token: &str,
-        min: &str,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let pool = pool_segment(pool)?;
-        self.get(
-            &format!("/networks/{NETWORK}/pools/{pool}/trades"),
-            &[
-                ("token".into(), token.into()),
-                ("trade_volume_in_usd_greater_than".into(), min.into()),
-            ],
-            Duration::from_secs(10),
-            read,
-        )
-    }
-}
-
-pub struct GoPlus<'a> {
-    runtime: &'a Runtime,
-}
-
-impl<'a> GoPlus<'a> {
-    pub fn new(runtime: &'a Runtime) -> Self {
-        Self { runtime }
-    }
-
-    pub fn token_security(
-        &self,
-        token: &str,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let token = address_segment(token)?;
-        get(
-            self.runtime,
-            "goplus",
-            &self.runtime.origins.goplus,
-            &format!("/token_security/{}", model::CHAIN_ID),
-            &[("contract_addresses".into(), token)],
-            &[],
-            Duration::from_secs(60),
-            None,
-            read,
-        )
-    }
-}
-
-pub struct Lifi<'a> {
-    runtime: &'a Runtime,
-}
-impl<'a> Lifi<'a> {
-    pub fn new(runtime: &'a Runtime) -> Self {
-        Self { runtime }
-    }
-    /// Read-only same-chain quote; `to` is USDG, a token, or the native sentinel.
-    /// Calldata and approval transactions are discarded.
-    pub fn quote(
-        &self,
-        wallet: &str,
-        from: &str,
-        to: &str,
-        amount: &str,
-        read: &mut ReadContext,
-    ) -> Result<Value, ProviderError> {
-        let wallet = address_segment(wallet)?;
-        let from = address_segment(from)?;
-        let to = address_segment(to)?;
-        if amount.is_empty() || amount.len() > 78 || !amount.bytes().all(|b| b.is_ascii_digit()) {
-            return Err(ProviderError::schema(
-                "invalid quote amount passed to provider adapter",
-            ));
-        }
-        let q = vec![
-            ("fromChain".into(), model::CHAIN_ID.to_string()),
-            ("toChain".into(), model::CHAIN_ID.to_string()),
-            ("fromToken".into(), from.clone()),
-            ("toToken".into(), to.clone()),
-            ("fromAmount".into(), amount.into()),
-            ("fromAddress".into(), wallet.clone()),
-            ("toAddress".into(), wallet.clone()),
-            ("order".into(), "RECOMMENDED".into()),
-            ("slippage".into(), "0.005".into()),
-        ];
-        let mut value = get(
-            self.runtime,
-            "lifi",
-            &self.runtime.origins.lifi,
-            "/quote",
-            &q,
-            &[],
-            Duration::from_secs(5),
-            None,
-            read,
-        )?;
-        validate_quote(&value, &wallet, &from, &to, amount)?;
-        value
-            .as_object_mut()
-            .map(|object| object.remove("transactionRequest"));
-        Ok(value)
-    }
-}
-
-fn validate_quote(
-    value: &Value,
-    wallet: &str,
-    from: &str,
-    to: &str,
-    amount: &str,
-) -> Result<(), ProviderError> {
-    let chain = |path: &[&str]| {
-        model::get(value, path).and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok()))
-    };
-    let matches = chain(&["action", "fromChainId"]) == Some(model::CHAIN_ID)
-        && chain(&["action", "toChainId"]) == Some(model::CHAIN_ID)
-        && chain(&["action", "fromToken", "chainId"]) == Some(model::CHAIN_ID)
-        && chain(&["action", "toToken", "chainId"]) == Some(model::CHAIN_ID)
-        && model::string(value, &["action", "fromAmount"]).as_deref() == Some(amount)
-        && model::string(value, &["action", "fromToken", "address"])
-            .is_some_and(|v| v.eq_ignore_ascii_case(from))
-        && model::string(value, &["action", "toToken", "address"])
-            .is_some_and(|v| v.eq_ignore_ascii_case(to))
-        && model::string(value, &["action", "fromAddress"])
-            .is_some_and(|v| v.eq_ignore_ascii_case(wallet))
-        && model::string(value, &["action", "toAddress"])
-            .is_some_and(|v| v.eq_ignore_ascii_case(wallet))
-        && model::string(value, &["estimate", "fromAmount"]).as_deref() == Some(amount)
-        && model::string(value, &["estimate", "toAmount"]).is_some_and(|v| is_atomic(&v));
-    if matches {
-        Ok(())
-    } else {
-        Err(ProviderError::schema(
-            "LI.FI quote does not match the request",
-        ))
-    }
-}
-
-fn is_atomic(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 78 && value.bytes().all(|b| b.is_ascii_digit())
-}
-
-pub fn included_map(value: &Value) -> Map<String, Value> {
+fn retry_after(value: Option<&str>) -> Duration {
     value
-        .get("included")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|v| model::string(v, &["id"]).map(|id| (id, v.clone())))
-        .collect()
-}
-pub fn relation_id(value: &Value, name: &str) -> Option<String> {
-    model::string(value, &["relationships", name, "data", "id"])
-}
-pub fn token_from_resource(value: &Value) -> Value {
-    let Some(id) = resource_address(value) else {
-        return Value::Null;
-    };
-    model::token(
-        &id,
-        model::string(value, &["attributes", "symbol"]).as_deref(),
-        model::string(value, &["attributes", "name"]).as_deref(),
-        model::string(value, &["attributes", "decimals"]).and_then(|s| s.parse().ok()),
-        model::string(value, &["attributes", "image_url"]).as_deref(),
-    )
-}
-fn resource_address(value: &Value) -> Option<String> {
-    model::string(value, &["attributes", "address"])
-        .or_else(|| {
-            model::string(value, &["id"])
-                .map(|id| id.strip_prefix("robinhood_").unwrap_or(&id).to_string())
-        })
-        .and_then(|id| model::address(&id).ok())
-}
-fn relation_token(value: &Value, name: &str, included: &Map<String, Value>) -> Value {
-    let Some(id) = relation_id(value, name) else {
-        return Value::Null;
-    };
-    included
-        .get(&id)
-        .map(token_from_resource)
-        .filter(|v| !v.is_null())
-        .unwrap_or_else(|| {
-            let address = id.strip_prefix("robinhood_").unwrap_or(&id);
-            model::address(address)
-                .map(|address| model::token(&address, None, None, None, None))
-                .unwrap_or(Value::Null)
-        })
-}
-fn window(attrs: &Value, key: &str) -> Value {
-    json!({
-        "base_price_change_pct": model::string(attrs, &["price_change_percentage", key]),
-        "volume_usd": model::string(attrs, &["volume_usd", key]),
-        "buys": model::get(attrs, &["transactions", key, "buys"]).and_then(Value::as_u64),
-        "sells": model::get(attrs, &["transactions", key, "sells"]).and_then(Value::as_u64),
-        "buyers": model::get(attrs, &["transactions", key, "buyers"]).and_then(Value::as_u64),
-        "sellers": model::get(attrs, &["transactions", key, "sellers"]).and_then(Value::as_u64)
-    })
-}
-pub fn pool(value: &Value, included: &Map<String, Value>) -> Value {
-    let attrs = value.get("attributes").cloned().unwrap_or(json!({}));
-    let base = relation_token(value, "base_token", included);
-    let quote = relation_token(value, "quote_token", included);
-    let dex_id = relation_id(value, "dex");
-    let dex_name = dex_id
-        .as_ref()
-        .and_then(|id| included.get(id))
-        .and_then(|dex| model::string(dex, &["attributes", "name"]));
-    let windows: Map<String, Value> = ["m5", "m15", "m30", "h1", "h6", "h24"]
-        .into_iter()
-        .map(|key| (key.into(), window(&attrs, key)))
-        .collect();
-    let pool_id = model::string(value, &["attributes", "address"]).or_else(|| {
-        model::string(value, &["id"])
-            .map(|id| id.strip_prefix("robinhood_").unwrap_or(&id).to_string())
-    });
-    json!({"pool_id":pool_id,"dex_id":dex_id,"dex_name":dex_name,"name":model::string(value,&["attributes","name"]),"base_token":base,"quote_token":quote,"base_price_usd":model::string(&attrs,&["base_token_price_usd"]),"quote_price_usd":model::string(&attrs,&["quote_token_price_usd"]),"liquidity_usd":model::string(&attrs,&["reserve_in_usd"]),"fdv_usd":model::string(&attrs,&["fdv_usd"]),"market_cap_usd":model::string(&attrs,&["market_cap_usd"]),"created_at":model::string(&attrs,&["pool_created_at"]),"windows":windows})
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .map(|seconds| Duration::from_secs(seconds.min(3600)))
+        .unwrap_or(Duration::from_millis(400))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::app::ProviderOrigins;
+pub(crate) mod testing {
+    use crate::app::{Origins, Runtime};
     use reqwest::blocking::Client;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
-        mpsc,
     };
-    use std::thread;
 
-    fn server(responses: Vec<&'static str>) -> (String, Arc<AtomicUsize>) {
+    /// Serves canned HTTP responses in order and counts requests.
+    pub fn server(responses: Vec<String>) -> (Runtime, Arc<AtomicUsize>) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let count = Arc::new(AtomicUsize::new(0));
         let seen = count.clone();
-        thread::spawn(move || {
+        std::thread::spawn(move || {
             for response in responses {
-                let (mut stream, _) = listener.accept().unwrap();
-                let mut request = [0_u8; 2048];
-                let _ = stream.read(&mut request).unwrap();
+                let Ok((mut stream, _)) = listener.accept() else {
+                    return;
+                };
+                let mut request = [0_u8; 16384];
+                let _ = stream.read(&mut request);
                 seen.fetch_add(1, Ordering::SeqCst);
-                stream.write_all(response.as_bytes()).unwrap();
+                let _ = stream.write_all(response.as_bytes());
             }
         });
-        (base, count)
+        let origins = Origins {
+            dexscreener: base.clone(),
+            gecko: base.clone(),
+            goplus: base.clone(),
+            rpc: base.clone(),
+            rpc_fast: base.clone(),
+            lifi: base,
+        };
+        (Runtime::new(Client::new(), origins), count)
     }
 
-    fn capture_server(response_body: String) -> (String, mpsc::Receiver<String>) {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let base = format!("http://{}", listener.local_addr().unwrap());
-        let (sender, receiver) = mpsc::channel();
-        thread::spawn(move || {
-            let (mut stream, _) = listener.accept().unwrap();
-            let mut request = [0_u8; 8192];
-            let read = stream.read(&mut request).unwrap();
-            sender
-                .send(String::from_utf8_lossy(&request[..read]).into_owned())
-                .unwrap();
-            let response = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                response_body.len(),
-                response_body
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-        });
-        (base, receiver)
-    }
-
-    #[test]
-    fn pool_normalization_keeps_v4_id_and_complete_windows() {
-        let raw = json!({
-            "id":"robinhood_0x4be9657ec9002e528f4f17a5c43edc525a07f888f7b180c2afbf75e096c4f38a",
-            "attributes":{"name":"PONS / USDG","fdv_usd":"250000","market_cap_usd":"175000","transactions":{"h24":{"buys":7,"sells":3}},"volume_usd":{"h24":"12.5"}},
-            "relationships":{
-                "base_token":{"data":{"id":"robinhood_0x39dbed3a2bd333467115de45665cc57f813c4571"}},
-                "quote_token":{"data":{"id":"robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168"}},
-                "dex":{"data":{"id":"uniswap-v4-robinhood"}}
-            }
-        });
-        let normalized = pool(&raw, &Map::new());
-        assert_eq!(
-            model::string(&normalized, &["pool_id"]).as_deref(),
-            Some("0x4be9657ec9002e528f4f17a5c43edc525a07f888f7b180c2afbf75e096c4f38a")
-        );
-        assert_eq!(
-            model::string(&normalized, &["base_token", "id"]).as_deref(),
-            Some("0x39dbed3a2bd333467115de45665cc57f813c4571")
-        );
-        assert_eq!(
-            model::get(&normalized, &["windows"])
-                .and_then(Value::as_object)
-                .unwrap()
-                .len(),
-            6
-        );
-        assert_eq!(
-            model::get(&normalized, &["windows", "h24", "buys"]).and_then(Value::as_u64),
-            Some(7)
-        );
-        assert_eq!(
-            model::string(&normalized, &["fdv_usd"]).as_deref(),
-            Some("250000")
-        );
-        assert_eq!(
-            model::string(&normalized, &["market_cap_usd"]).as_deref(),
-            Some("175000")
-        );
-        assert!(normalized.get("volume_24h_usd").is_none());
-    }
-
-    #[test]
-    fn lifi_quote_must_echo_request_invariants() {
-        let wallet = "0xb202bb725c85b90bd847d350ebc7f16ff8408ed8";
-        let from = "0x39dbed3a2bd333467115de45665cc57f813c4571";
-        let quote = json!({"action":{"fromChainId":4663,"toChainId":4663,"fromAmount":"1000000000000000000","fromAddress":wallet,"toAddress":wallet,"fromToken":{"address":from,"chainId":4663},"toToken":{"address":model::USDG,"chainId":4663}},"estimate":{"fromAmount":"1000000000000000000","toAmount":"636098"}});
-        assert!(validate_quote(&quote, wallet, from, model::USDG, "1000000000000000000").is_ok());
-        let mut wrong = quote;
-        wrong["action"]["toChainId"] = json!(1);
-        assert!(validate_quote(&wrong, wallet, from, model::USDG, "1000000000000000000").is_err());
-    }
-
-    #[test]
-    fn lifi_quotes_are_keyless() {
-        let wallet = "0xb202bb725c85b90bd847d350ebc7f16ff8408ed8";
-        let from = "0x39dbed3a2bd333467115de45665cc57f813c4571";
-        let amount = "1000000000000000000";
-        let body = json!({
-            "action": {
-                "fromChainId": 4663, "toChainId": 4663, "fromAmount": amount,
-                "fromAddress": wallet, "toAddress": wallet,
-                "fromToken": {"address": from, "chainId": 4663},
-                "toToken": {"address": model::USDG, "chainId": 4663}
-            },
-            "estimate": {"fromAmount": amount, "toAmount": "636098"}
-        })
-        .to_string();
-        let (base, request) = capture_server(body);
-        let runtime = Runtime::fixture(
-            Client::new(),
-            ProviderOrigins {
-                gecko: base.clone(),
-                goplus: base.clone(),
-                coingecko: base.clone(),
-                coingecko_pro: base.clone(),
-                lifi: base,
-            },
-        );
-        let lifi = Lifi::new(&runtime);
-        let mut read = ReadContext::exit(false);
-        lifi.quote(wallet, from, model::USDG, amount, &mut read)
-            .unwrap();
-        let request = request.recv_timeout(Duration::from_secs(1)).unwrap();
-        assert!(!request.to_ascii_lowercase().contains("x-lifi-api-key"));
-        assert!(!request.contains("legacy-user-key"));
-    }
-
-    #[test]
-    fn retry_after_beyond_deadline_does_not_retry() {
-        let response = "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 60\r\nContent-Type: application/json\r\nContent-Length: 15\r\nConnection: close\r\n\r\n{\"code\":1005}";
-        let (base, count) = server(vec![response]);
-        let runtime = Runtime::fixture(
-            Client::new(),
-            ProviderOrigins {
-                gecko: base.clone(),
-                goplus: base.clone(),
-                coingecko: base.clone(),
-                coingecko_pro: base.clone(),
-                lifi: base.clone(),
-            },
-        );
-        let mut read = ReadContext::markets(false);
-        let error = get(
-            &runtime,
-            "geckoterminal",
-            &base,
-            "/limited",
-            &[],
-            &[],
-            Duration::from_secs(1),
-            None,
-            &mut read,
+    pub fn reply(status: &str, body: &str) -> String {
+        format!(
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
         )
-        .unwrap_err();
-        assert_eq!(error.code, "RATE_LIMITED");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::testing::{reply, server};
+    use super::*;
+    use std::sync::atomic::Ordering;
+
+    #[test]
+    fn caches_and_reports_rate_limits() {
+        let (rt, count) = server(vec![
+            reply("200 OK", "{\"ok\":true}"),
+            reply("429 Too Many Requests", "{}"),
+            reply("429 Too Many Requests", "{}"),
+        ]);
+        let call = Call::new(10);
+        let url = format!("{}/a", rt.origins.dexscreener);
+        let ttl = Some(Duration::from_secs(30));
+        assert!(fetch(&rt, &call, "dexscreener", &url, Body::Get(&[]), 1, ttl).is_ok());
+        assert!(fetch(&rt, &call, "dexscreener", &url, Body::Get(&[]), 1, ttl).is_ok());
         assert_eq!(count.load(Ordering::SeqCst), 1);
+        let url = format!("{}/b", rt.origins.dexscreener);
+        let error = fetch(&rt, &call, "dexscreener", &url, Body::Get(&[]), 1, ttl).unwrap_err();
+        assert_eq!(error.code, "RATE_LIMITED");
+        assert!(error.message.contains("DexScreener"));
     }
 
     #[test]
-    fn cache_refresh_and_provenance_follow_actual_requests() {
-        let response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 11\r\nConnection: close\r\n\r\n{\"ok\":true}";
-        let (base, count) = server(vec![response, response, response]);
-        let runtime = Runtime::fixture(
-            Client::new(),
-            ProviderOrigins {
-                gecko: base.clone(),
-                goplus: base.clone(),
-                coingecko: base.clone(),
-                coingecko_pro: base.clone(),
-                lifi: base.clone(),
-            },
-        );
-        let mut first = ReadContext::markets(false);
-        get(
-            &runtime,
-            "geckoterminal",
-            &base,
-            "/cached",
-            &[],
-            &[],
-            Duration::from_secs(30),
-            Some("secret-value"),
-            &mut first,
-        )
-        .unwrap();
-        let mut cached = ReadContext::markets(false);
-        get(
-            &runtime,
-            "geckoterminal",
-            &base,
-            "/cached",
-            &[],
-            &[],
-            Duration::from_secs(30),
-            Some("secret-value"),
-            &mut cached,
-        )
-        .unwrap();
-        let mut refresh = ReadContext::markets(true);
-        get(
-            &runtime,
-            "geckoterminal",
-            &base,
-            "/cached",
-            &[],
-            &[],
-            Duration::from_secs(30),
-            Some("secret-value"),
-            &mut refresh,
-        )
-        .unwrap();
-        let mut other_credential = ReadContext::markets(false);
-        get(
-            &runtime,
-            "geckoterminal",
-            &base,
-            "/cached",
-            &[],
-            &[],
-            Duration::from_secs(30),
-            Some("other-secret"),
-            &mut other_credential,
-        )
-        .unwrap();
-        assert_eq!(count.load(Ordering::SeqCst), 3);
-        assert_eq!(first.sources[0]["cached"], false);
-        assert_eq!(cached.sources[0]["cached"], true);
-        assert_eq!(refresh.sources[0]["cached"], false);
-        assert!(
-            !cache_key("geckoterminal", "/cached", &[], Some("secret-value"))
-                .contains("secret-value")
-        );
-    }
-
-    #[test]
-    fn expired_deadline_sends_no_request() {
-        let runtime = Runtime::fixture(Client::new(), ProviderOrigins::default());
-        let mut read = ReadContext::markets(false);
-        read.deadline = std::time::Instant::now();
-        let error = get(
-            &runtime,
-            "geckoterminal",
-            "http://127.0.0.1:1",
-            "/never",
-            &[],
-            &[],
-            Duration::ZERO,
-            None,
-            &mut read,
-        )
-        .unwrap_err();
-        assert_eq!(error.code, "DEADLINE_EXCEEDED");
-        assert!(read.sources.is_empty());
+    fn expired_deadline_sends_nothing() {
+        let (rt, count) = server(vec![]);
+        let mut call = Call::new(10);
+        call.deadline = std::time::Instant::now();
+        let url = format!("{}/a", rt.origins.gecko);
+        let error = fetch(&rt, &call, "geckoterminal", &url, Body::Get(&[]), 1, None).unwrap_err();
+        assert_eq!(error.code, "DEADLINE");
+        assert_eq!(count.load(Ordering::SeqCst), 0);
     }
 }

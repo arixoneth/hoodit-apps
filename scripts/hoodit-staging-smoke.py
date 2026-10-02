@@ -16,12 +16,12 @@ import uuid
 DEFAULT_TURNS = [
     ("Hello. Briefly identify Hoodit and what read-only research you can do.", None),
     (
-        "Activate Hoodit's markets skill and show the currently trending pools on Robinhood Chain. This is read-only; do not prepare or request any transaction.",
-        "hoodit_discover_pools",
+        "Show what's trending on Robinhood Chain right now. Read-only; do not prepare or request any transaction.",
+        "hoodit_discover",
     ),
     (
-        "Activate Hoodit's portfolio skill and show balances only for public Robinhood Chain address 0xb202bb725c85b90bd847d350ebc7f16ff8408ed8. Do not request valuation quotes and do not prepare or request any transaction.",
-        "hoodit_get_portfolio",
+        "Pull the chart and order flow for PARLEY 0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05. Read-only.",
+        "hoodit_get_chart",
     ),
 ]
 
@@ -187,9 +187,9 @@ def require_tool_result(events: list[dict], expected_tool: str) -> None:
         raise RuntimeError(f"Turn completed without an {expected_tool} result")
     for message in matching:
         for value in decoded_values(message.get("toolResult")):
-            if isinstance(value, dict) and value.get("status") in {"ok", "partial"} and value.get("data") is not None:
+            if isinstance(value, dict) and value.get("status") in {"ok", "partial"}:
                 return
-    raise RuntimeError(f"{expected_tool} returned no successful non-empty Hoodit envelope")
+    raise RuntimeError(f"{expected_tool} returned no successful Hoodit result")
 
 
 def secret_values(paths: list[str]) -> list[str]:
@@ -217,6 +217,7 @@ def main() -> None:
     parser.add_argument("--expected-tool", action="append", dest="expected_tools")
     parser.add_argument("--secret-file", action="append", default=[])
     parser.add_argument("--timeout", type=int, default=180)
+    parser.add_argument("--model", help="model id for the agent, e.g. gpt-6-luna")
     args = parser.parse_args()
     base = args.base.rstrip("/")
     guest = request_json(f"{base}/api/auth/widget/guest", origin=args.origin, method="POST", body={})
@@ -235,6 +236,8 @@ def main() -> None:
         turns = DEFAULT_TURNS
     for prompt, expected_tool in turns:
         payload = {"applicationId": args.application_id, "message": prompt}
+        if args.model:
+            payload["model"] = args.model
         if session_id:
             payload["sessionId"] = session_id
         delta = normalize_delta(request_json(f"{base}/v1/agent/chat", token=token, origin=args.origin, method="POST", body=payload))

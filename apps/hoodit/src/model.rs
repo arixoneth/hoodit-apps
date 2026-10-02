@@ -1,21 +1,32 @@
-use chrono::Utc;
 use serde_json::{Value, json};
 
 pub const CHAIN_ID: u64 = 4663;
 pub const NETWORK: &str = "robinhood";
 pub const USDG: &str = "0x5fc5360d0400a0fd4f2af552add042d716f1d168";
-pub const NATIVE_SENTINEL: &str = "0x0000000000000000000000000000000000000000";
+pub const WETH: &str = "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
+pub const NATIVE: &str = "0x0000000000000000000000000000000000000000";
 
 pub fn address(value: &str) -> Result<String, String> {
     let value = value.trim();
-    if value.len() != 42
-        || !value.starts_with("0x")
-        || !value[2..].bytes().all(|b| b.is_ascii_hexdigit())
-    {
-        return Err("expected a 20-byte 0x-prefixed address".into());
+    if value.len() != 42 || !value.starts_with("0x") || !is_hex(&value[2..]) {
+        return Err("expected a 20-byte 0x contract address".into());
     }
     Ok(value.to_ascii_lowercase())
 }
+
+/// A pool is a 20-byte pair/pool/curve contract or a 32-byte Uniswap v4 pool id.
+pub fn pool_id(value: &str) -> Result<String, String> {
+    let value = value.trim();
+    if !matches!(value.len(), 42 | 66) || !value.starts_with("0x") || !is_hex(&value[2..]) {
+        return Err("expected a pool_id returned by a Hoodit tool".into());
+    }
+    Ok(value.to_ascii_lowercase())
+}
+
+fn is_hex(value: &str) -> bool {
+    value.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
 pub fn decimal(value: &str) -> Result<String, String> {
     let v = value.trim();
     let mut parts = v.split('.');
@@ -34,66 +45,25 @@ pub fn decimal(value: &str) -> Result<String, String> {
         Ok(v.into())
     }
 }
-pub fn signed_decimal(value: &str) -> Result<String, String> {
-    let value = value.trim();
-    let unsigned = value.strip_prefix('-').unwrap_or(value);
-    if unsigned.is_empty() {
-        return Err("expected a plain signed decimal string".into());
+
+/// Tool success. Notes disclose gaps in coverage and mark the result partial.
+pub fn ok(mut data: Value, notes: Vec<String>) -> Value {
+    if let Some(object) = data.as_object_mut() {
+        object.insert(
+            "status".into(),
+            json!(if notes.is_empty() { "ok" } else { "partial" }),
+        );
+        if !notes.is_empty() {
+            object.insert("notes".into(), json!(notes));
+        }
     }
-    decimal(unsigned)
-        .map(|_| value.to_string())
-        .map_err(|_| "expected a plain signed decimal string".into())
+    data
 }
-pub fn meta(sources: Vec<Value>, warnings: Vec<Value>) -> Value {
-    json!({"chain_id":CHAIN_ID,"generated_at":Utc::now().to_rfc3339(),"sources":sources,"warnings":warnings})
-}
-pub fn warning(code: &str, message: &str) -> Value {
-    json!({"code":code,"message":message,"subject":null})
-}
-pub fn ok(data: Value, sources: Vec<Value>, warnings: Vec<Value>) -> Value {
-    let partial = warnings
-        .iter()
-        .any(|warning| string(warning, &["code"]).as_deref() != Some("NOT_INDEXED"));
-    envelope(
-        if partial { "partial" } else { "ok" },
-        Some(data),
-        sources,
-        warnings,
-        None,
-    )
-}
+
 pub fn error(code: &str, message: &str, retryable: bool) -> Value {
-    envelope(
-        "error",
-        None,
-        vec![],
-        vec![],
-        Some(
-            json!({"code":code,"message":message,"retryable":retryable,"retry_after_seconds":null}),
-        ),
-    )
+    json!({"status":"error","error":{"code":code,"message":message,"retryable":retryable}})
 }
-fn envelope(
-    status: &str,
-    data: Option<Value>,
-    sources: Vec<Value>,
-    warnings: Vec<Value>,
-    error: Option<Value>,
-) -> Value {
-    json!({"schema_version":"1.4.0","status":status,"data":data,"meta":meta(sources,warnings),"error":error})
-}
-pub fn token(
-    id: &str,
-    symbol: Option<&str>,
-    name: Option<&str>,
-    decimals: Option<u8>,
-    image_url: Option<&str>,
-) -> Value {
-    let symbol = symbol.map(|v| v.chars().take(64).collect::<String>());
-    let name = name.map(|v| v.chars().take(200).collect::<String>());
-    let image_url = image_url.map(|v| v.chars().take(2048).collect::<String>());
-    json!({"id":id,"kind":if id=="native" {"native"} else {"erc20"},"symbol":symbol,"name":name,"decimals":decimals,"image_url":image_url})
-}
+
 pub fn get<'a>(v: &'a Value, path: &[&str]) -> Option<&'a Value> {
     path.iter().try_fold(v, |v, k| v.get(*k))
 }
@@ -104,15 +74,79 @@ pub fn string(v: &Value, path: &[&str]) -> Option<String> {
         _ => None,
     })
 }
+pub fn number(v: &Value, path: &[&str]) -> Option<f64> {
+    get(v, path).and_then(|v| match v {
+        Value::Number(n) => n.to_string().parse().ok(),
+        Value::String(s) => s.trim().parse().ok(),
+        _ => None,
+    })
+}
+
+/// Rounds to four significant figures: enough for prices of any magnitude.
+pub fn sig(x: f64) -> Value {
+    if !x.is_finite() {
+        return Value::Null;
+    }
+    if x == 0.0 {
+        return json!(0);
+    }
+    format!("{x:.3e}")
+        .parse::<f64>()
+        .map(|v| json!(v))
+        .unwrap_or(Value::Null)
+}
+/// Dollar figures: whole dollars from $100, cents below.
+pub fn usd(x: f64) -> Value {
+    if !x.is_finite() {
+        Value::Null
+    } else if x.abs() >= 100.0 {
+        json!(x.round() as i64)
+    } else {
+        json!((x * 100.0).round() / 100.0)
+    }
+}
+/// Percentages and ratios to one decimal.
+pub fn one(x: f64) -> Value {
+    if x.is_finite() {
+        json!((x * 10.0).round() / 10.0)
+    } else {
+        Value::Null
+    }
+}
+pub fn opt(value: Option<f64>, f: fn(f64) -> Value) -> Value {
+    value.map(f).unwrap_or(Value::Null)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn validates_addresses() {
+    fn validates_identifiers() {
         assert_eq!(
             address("0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA").unwrap(),
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         );
         assert!(address("0x1").is_err());
+        assert!(pool_id(&format!("0x{}", "a".repeat(64))).is_ok());
+        assert!(pool_id("robinhood_0x1").is_err());
+    }
+
+    #[test]
+    fn compacts_numbers() {
+        assert_eq!(sig(0.000429612), json!(0.0004296));
+        assert_eq!(sig(1234567.0), json!(1235000.0));
+        assert_eq!(usd(52057.12), json!(52057));
+        assert_eq!(usd(42.456), json!(42.46));
+        assert_eq!(one(2166.812), json!(2166.8));
+        assert_eq!(sig(f64::NAN), Value::Null);
+    }
+
+    #[test]
+    fn notes_mark_results_partial() {
+        assert_eq!(ok(json!({"a":1}), vec![])["status"], "ok");
+        let partial = ok(json!({"a":1}), vec!["gap".into()]);
+        assert_eq!(partial["status"], "partial");
+        assert_eq!(partial["notes"][0], "gap");
     }
 }

@@ -1,0 +1,92 @@
+{
+  "notes": "Live staging conversations. Tune only against the dev split; run holdout once per release candidate and never copy holdout prompts or expectations into skills. Checks are mechanical; answers are graded by reading them against the returned tool evidence.",
+  "cases": [
+    {
+      "id": "ape_today",
+      "split": "dev",
+      "prompts": ["what can i ape today?", "is the chart actually decent or just hype?"],
+      "checks": {"must_call": ["hoodit_discover", "hoodit_get_chart"]},
+      "expect": "Scans a feed, charts finalists before praising any, offers up to three differentiated picks with contracts and main risks, and treats blow-off tops as late. The follow-up cites candle structure, not percentage windows."
+    },
+    {
+      "id": "chase_pump",
+      "split": "dev",
+      "prompts": ["SC 0xf15aab29c3d22cf2b469d4a9b0c0a72f31ba0711 still worth chasing?"],
+      "checks": {"must_call": ["hoodit_get_chart"]},
+      "expect": "Reads the chart and flags. If it ran hard, says it is late or extended with the numbers, and gives the condition that would make an entry reasonable."
+    },
+    {
+      "id": "graduated_lifecycle",
+      "split": "dev",
+      "prompts": ["is PARLEY 0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05 still on the pons curve or did it graduate? chart look ok?"],
+      "checks": {"must_call": ["hoodit_get_token", "hoodit_get_chart"]},
+      "expect": "States the launchpad stage from data (graduated with date), then judges the destination pool's chart."
+    },
+    {
+      "id": "fresh_curves",
+      "split": "dev",
+      "prompts": ["anything fresh on pons about to graduate?"],
+      "checks": {"must_call": ["hoodit_discover"]},
+      "expect": "Uses the launchpad feed, reports curve progress honestly (nothing near graduation is a valid answer), and charts anything it highlights."
+    },
+    {
+      "id": "who_is_selling",
+      "split": "dev",
+      "prompts": ["who's selling ROBINPEPE rn? one wallet dumping or spread out?"],
+      "checks": {"must_call": ["hoodit_get_chart"]},
+      "expect": "Resolves the ticker, uses order flow and top sellers with their share, and says whether selling is concentrated or spread, noting the resolved-sample coverage."
+    },
+    {
+      "id": "ape_with_size",
+      "split": "dev",
+      "prompts": ["0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05 ape or pass? could i get out if i put 0.05 eth in"],
+      "checks": {"must_call": ["hoodit_check_exit", "hoodit_get_chart"]},
+      "expect": "Runs a round-trip exit check at 0.05 ETH and reports the loss next to the verdict, which also rests on chart and security."
+    },
+    {
+      "id": "wallet_balances",
+      "split": "dev",
+      "prompts": ["what's in 0xb202bb725c85b90bd847d350ebc7f16ff8408ed8 on robinhood chain? rough usd value"],
+      "checks": {"must_call_any": ["get_erc20_holdings", "get_account_info", "get_token_balances"], "must_not_call": ["hoodit_discover"]},
+      "expect": "Uses the host holdings tool, gives balances and a rough value, and does not value spam tokens as real."
+    },
+    {
+      "id": "ticker_clones",
+      "split": "dev",
+      "prompts": ["is PEPE good?"],
+      "checks": {"must_call": ["hoodit_search"]},
+      "expect": "Notices several PEPE contracts and asks which one, or clearly scopes to the most liquid one with its contract, without judging blindly."
+    },
+    {
+      "id": "two_profiles",
+      "split": "holdout",
+      "prompts": ["give me a degen play and a safer play for today, small size"],
+      "checks": {"must_call": ["hoodit_discover", "hoodit_get_chart"]
+      }
+    },
+    {
+      "id": "named_token_opinion",
+      "split": "holdout",
+      "prompts": ["WALLET token any good? 0x0339f5459fc690ac85f1782e15782a151b4a9e1b"],
+      "checks": {"must_call": ["hoodit_get_chart"]}
+    },
+    {
+      "id": "last_hour_movers",
+      "split": "holdout",
+      "prompts": ["what's pumping in the last hour?"],
+      "checks": {"must_call": ["hoodit_discover"]}
+    },
+    {
+      "id": "breakout_claim",
+      "split": "holdout",
+      "prompts": ["MOO looks like it's breaking out, should i buy?"],
+      "checks": {"must_call": ["hoodit_get_chart"]}
+    },
+    {
+      "id": "is_it_dead",
+      "split": "holdout",
+      "prompts": ["check this one 0xe15db7c8547a0add11eb26a700246cca08aefce5 is it dead?"],
+      "checks": {"must_call": ["hoodit_get_chart"]}
+    }
+  ]
+}
