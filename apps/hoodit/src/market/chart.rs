@@ -14,7 +14,7 @@ pub const INTERVALS: [(&str, i64); 6] = [
     ("1d", 86_400),
 ];
 /// Enough to read structure; every row costs model context on each turn.
-const MAX_CANDLES: i64 = 32;
+const MAX_CANDLES: i64 = 24;
 /// Dust trades round badly and print fake wicks; they still count as volume.
 const MIN_PRICED_USD: f64 = 1.0;
 
@@ -22,7 +22,7 @@ pub fn interval(label: &str) -> Option<i64> {
     INTERVALS.iter().find(|(l, _)| *l == label).map(|(_, s)| *s)
 }
 
-/// The finest interval that shows the span in at most 32 candles.
+/// The finest interval that shows the span in at most 24 candles.
 pub fn auto_interval(span: i64) -> (&'static str, i64) {
     INTERVALS
         .into_iter()
@@ -380,8 +380,8 @@ mod tests {
     #[test]
     fn picks_an_interval_for_the_span() {
         assert_eq!(auto_interval(3600).0, "5m");
-        assert_eq!(auto_interval(8 * 3600).0, "15m");
+        assert_eq!(auto_interval(6 * 3600).0, "15m");
         assert_eq!(auto_interval(24 * 3600).0, "1h");
-        assert_eq!(auto_interval(5 * 86_400).0, "4h");
+        assert_eq!(auto_interval(4 * 86_400).0, "4h");
     }
 }

@@ -29,7 +29,7 @@ pub struct ChartArgs {
     #[serde(default)]
     #[schemars(with = "u16", range(min = 1, max = 168))]
     pub hours: Option<u16>,
-    /// Candle width. Omit to fit the window in about 48 candles.
+    /// Candle width. Omit to fit the window in about 24 candles.
     #[serde(default)]
     #[schemars(with = "String", extend("enum" = ["1m", "5m", "15m", "1h", "4h", "1d"]))]
     pub interval: Option<String>,
@@ -112,8 +112,8 @@ impl DynAomiTool for GetChart {
             _ => fitted,
         };
         let mut series = candles(trades, &market, secs);
-        if series.len() > 33 {
-            series.drain(..series.len() - 33);
+        if series.len() > 25 {
+            series.drain(..series.len() - 25);
         }
         let covered = one((found.to_ts - found.from_ts) as f64 / 3600.0);
         let mut out = json!({

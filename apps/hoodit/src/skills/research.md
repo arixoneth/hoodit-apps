@@ -12,6 +12,8 @@ Read-only research on Robinhood Chain coins. Research never stages a trade; the 
 
 ## Workflows
 
+Budget each answer: at most three `hoodit_get_chart` calls and three `hoodit_get_token` calls, and run `hoodit_check_exit` only for the coin you actually recommend or the size the user named. The conversation has a hard context limit, so a fourth chart costs more than it adds.
+
 **"what can i ape" / "anything cooking"**: run `hoodit_discover` (trending; `launchpad` or `new` if they want fresh). From the flags, shortlist 3–5 coins with real liquidity and current activity. Chart the 2–3 most promising with `hoodit_get_chart`, then `hoodit_get_token` the finalists for security. Answer with up to three picks that have different risk profiles, for example a steadier name, a momentum play, and a small-size degen bet. Each pick gets the reason it earned its place and its main risk. If nothing survives, say no pick and why.
 
 **Ticker or contract opinion**: `hoodit_search` if needed, then `hoodit_get_token` and `hoodit_get_chart`, then the verdict. For a graduated token, give the graduation date and judge the destination pool.
