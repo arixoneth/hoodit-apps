@@ -55,6 +55,14 @@ def raw_text(value: object) -> str:
     return value if isinstance(value, str) else json.dumps(value, separators=(",", ":"))
 
 
+def model_chars(value: object) -> int:
+    """Chars of the tool result text the model sees. The chat API returns
+    `[tool_name, "<pretty json>"]`; re-encoding that would count escapes."""
+    if isinstance(value, list) and len(value) == 2 and isinstance(value[1], str):
+        return len(value[1])
+    return len(raw_text(value))
+
+
 def parsed_result(value: object) -> object:
     for item in smoke.decoded_values(value):
         if isinstance(item, dict) and "status" in item:
@@ -96,7 +104,7 @@ def turn_record(deltas: list[dict], seen: set) -> dict:
                 calls.append({
                     "tool": message["toolName"],
                     "args": message.get("toolArguments"),
-                    "chars": len(raw_text(raw)),
+                    "chars": model_chars(raw),
                     "result": parsed_result(raw),
                 })
             elif message.get("role") == "agent" and key not in seen and not message.get("streaming"):

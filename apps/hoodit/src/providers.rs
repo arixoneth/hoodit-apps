@@ -433,7 +433,9 @@ async fn quote_once(
             ("fromAmount", amount.to_string()),
             ("fromAddress", from_address.to_string()),
             ("slippage", slippage.to_string()),
-            ("maxPriceImpact", "0.3".to_string()),
+            // LI.FI drops routes above this impact and calls them "no quotes";
+            // ask for nearly everything so a terrible exit shows as its loss.
+            ("maxPriceImpact", "0.99".to_string()),
             ("integrator", "hoodit".to_string()),
         ]);
     if let Some(key) = key {
