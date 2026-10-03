@@ -26,25 +26,29 @@ npm ci
 npm run dev
 ```
 
-Use `npm test`, `npm run lint` and `npm run build` before publishing frontend changes.
+Use `npm run lint` and `npm run build` before publishing frontend changes.
 
 ### In-page chat
 
-`/app` mounts the native Aomi widget, pinned to Hoodit application `2938613`.
-Guest and wallet sessions are issued directly by `chat.aomi.dev` and bound to
-the browser origin. Agent requests use `/api/agent/*` on this site because the
-hosted `/v1/agent/*` endpoint does not currently supply cross-origin CORS headers.
-The relay forwards the caller's bearer unchanged with this site's origin; Aomi
-still validates identity, scope and session ownership. It does not forward
-cookies, mint credentials, follow redirects, or use a shared server API key.
+`/app` mounts the native Aomi widget, pinned to the Hoodit application. The
+browser talks to the Aomi chat host directly: guest and wallet sessions are
+issued by it and bound to the browser origin, and `/v1/agent/*` serves CORS for
+any origin, so the site has no server code. Aomi validates identity, scope and
+session ownership from the origin-bound session bearer.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NEXT_PUBLIC_AOMI_API_URL` | `https://chat.aomi.dev` | Aomi chat host; set to `https://chat-staging.aomi.dev` for staging |
+| `NEXT_PUBLIC_HOODIT_APP_ID` | `2938613` | Hoodit application id on that host |
+| `NEXT_PUBLIC_PRIVY_APP_ID` | unset | Enables Privy sign-in; browser wallets otherwise |
+
 Guest credentials are page-scoped, so reloading starts a fresh conversation;
 local thread-ID persistence is disabled to avoid restoring another guest's session.
 
 Assistant UI dependencies are pinned through `overrides` to avoid the render
 loop and incompatible Markdown peer dependency in the freely resolved versions.
 When upgrading, verify rendering and a real read-only chat response in the
-browser, not just a successful build. Regression tests cover the relay's route,
-origin, credential and error boundaries. Wallet signing requires separate tests.
+browser, not just a successful build. Wallet signing requires separate tests.
 
 ## Aomi application
 

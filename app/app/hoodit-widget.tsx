@@ -8,10 +8,8 @@
 
 import { AomiWidget, robinhood, type CrossOriginWidgetAuth } from "@aomi-labs/widget-lib";
 import "@aomi-labs/widget-lib/providers/privy";
-import { chatFetch } from "../../lib/chat-fetch";
 import { aomiApiUrl, hooditAppId } from "../../lib/aomi-target";
 
-const clientOptions = { fetch: chatFetch };
 // Every turn goes straight to the Hoodit app instead of Aomi's auto router,
 // which otherwise picks generic apps (e.g. DefiLlama) for Hoodit questions.
 const routing = { targets: [{ mode: "direct", apps: [{ applicationId: Number(hooditAppId), app: "hoodit" }] }] } as const;
@@ -40,7 +38,6 @@ export default function HooditWidget() {
       showHeader
       showSidebar
       walletPosition="footer"
-      clientOptions={clientOptions}
       // Hoodit runs on the backend's default model; no picker.
       controlBarProps={{ hideModel: true }}
       routing={routing}

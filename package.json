@@ -10,8 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint .",
-    "test": "node --experimental-strip-types --test tests/*.test.mjs"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@aomi-labs/widget-lib": "3.0.10",

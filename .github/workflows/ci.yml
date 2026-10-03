@@ -40,5 +40,4 @@ jobs:
           cache: npm
       - run: npx --yes npm@10.9.2 ci
       - run: npm run lint
-      - run: npm test
       - run: npm run build
