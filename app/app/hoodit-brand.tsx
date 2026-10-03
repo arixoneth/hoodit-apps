@@ -13,7 +13,7 @@
 import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
-const WELCOME_TITLE = "What should we explore on Robinhood Chain?";
+const WELCOME_TITLE = "What should we ape today?";
 const WELCOME_PLACEHOLDER = "Tell Hoodit what to trade…";
 const REPLY_PLACEHOLDER = "Reply to Hoodit…";
 

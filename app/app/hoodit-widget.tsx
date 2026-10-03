@@ -9,8 +9,12 @@
 import { AomiWidget, robinhood, type CrossOriginWidgetAuth } from "@aomi-labs/widget-lib";
 import "@aomi-labs/widget-lib/providers/privy";
 import { chatFetch } from "../../lib/chat-fetch";
+import { aomiApiUrl, hooditAppId } from "../../lib/aomi-target";
 
 const clientOptions = { fetch: chatFetch };
+// Every turn goes straight to the Hoodit app instead of Aomi's auto router,
+// which otherwise picks generic apps (e.g. DefiLlama) for Hoodit questions.
+const routing = { targets: [{ mode: "direct", apps: [{ applicationId: Number(hooditAppId), app: "hoodit" }] }] } as const;
 const privyAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
 
 /** Privy owns sign-in when an app id is configured; otherwise plain browser wallets. */
@@ -21,8 +25,8 @@ const auth: CrossOriginWidgetAuth = privyAppId
 export default function HooditWidget() {
   return (
     <AomiWidget
-      applicationId="2938613"
-      apiUrl="https://chat.aomi.dev"
+      applicationId={hooditAppId}
+      apiUrl={aomiApiUrl}
       auth={auth}
       // Hoodit researches and trades tokens on Robinhood Chain only, so the network
       // selector and wallet connection are pinned to it.
@@ -37,10 +41,13 @@ export default function HooditWidget() {
       showSidebar
       walletPosition="footer"
       clientOptions={clientOptions}
-      controlBarProps={{ hideApp: true }}
+      // Hoodit runs on the backend's default model; no picker.
+      controlBarProps={{ hideModel: true }}
+      routing={routing}
       // Hoodit pins its own cream palette in app.css, so the widget's
-      // light/dark toggle would have no visible effect.
-      features={{ theme: false }}
+      // light/dark toggle would have no visible effect. The capability
+      // library would offer other Aomi apps inside a Hoodit-only chat.
+      features={{ theme: false, library: false }}
       // Guest credentials are page-scoped: never revive a conversation
       // owned by a previous anonymous identity after a reload.
       persistThread={false}

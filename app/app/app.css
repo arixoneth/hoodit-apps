@@ -17,7 +17,7 @@
   --card-foreground: var(--ink);
   --popover: #fbf6ea;
   --popover-foreground: var(--ink);
-  --primary: var(--cobalt);
+  --primary: var(--green);
   --primary-foreground: var(--paper);
   --secondary: var(--paper-2);
   --secondary-foreground: var(--ink);
@@ -28,15 +28,15 @@
   --destructive: #c8434f;
   --border: rgba(21, 22, 28, .28);
   --input: rgba(21, 22, 28, .28);
-  --ring: var(--cobalt);
+  --ring: var(--green);
   --sidebar: var(--paper-2);
   --sidebar-foreground: var(--ink);
-  --sidebar-primary: var(--cobalt);
+  --sidebar-primary: var(--green);
   --sidebar-primary-foreground: var(--paper);
   --sidebar-accent: var(--mint);
   --sidebar-accent-foreground: var(--ink);
   --sidebar-border: rgba(21, 22, 28, .22);
-  --sidebar-ring: var(--cobalt);
+  --sidebar-ring: var(--green);
 
   --aomi-bg: var(--paper);
   --aomi-surface: #fbf6ea;
@@ -45,9 +45,13 @@
   --aomi-border: rgba(21, 22, 28, .28);
   --aomi-fg: var(--ink);
   --aomi-muted: var(--ink-soft);
-  --aomi-accent: var(--cobalt);
-  --aomi-accent-strong: var(--cobalt-2);
-  --aomi-accent-subtle: #dfe6fa;
+  --aomi-accent: var(--green);
+  --aomi-accent-strong: var(--green-2);
+  --aomi-accent-subtle: #d9eedf;
+  /* Derived at :root from the widget's blue accent, so re-derive them here. */
+  --aomi-ring: var(--aomi-accent);
+  --aomi-accent-tint: color-mix(in srgb, var(--aomi-accent) 10%, transparent);
+  --aomi-accent-outline: color-mix(in srgb, var(--aomi-accent) 45%, transparent);
   --aomi-on-accent: var(--paper);
   --aomi-hover: var(--paper-2);
   --aomi-pink: var(--blush);
@@ -56,7 +60,7 @@
   --aomi-danger: #c8434f;
   --aomi-danger-strong: #a83542;
   --aomi-on-danger: var(--paper);
-  --aomi-info: var(--cobalt);
+  --aomi-info: var(--green);
 }
 
 .hoodit-app { min-height: 100dvh; display: flex; flex-direction: column; background: var(--paper); color: var(--ink); }
