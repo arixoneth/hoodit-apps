@@ -17,11 +17,11 @@ DEFAULT_TURNS = [
     ("Hello. Briefly identify Hoodit and what read-only research you can do.", None),
     (
         "Show what's trending on Robinhood Chain right now. Read-only; do not prepare or request any transaction.",
-        "hoodit_discover",
+        "hoodit_scan",
     ),
     (
-        "Pull the chart and order flow for PARLEY 0xcf3d41f9671dc2e86ee4c0271b79ae6fdce36c05. Read-only.",
-        "hoodit_get_chart",
+        "Pull the chart for PRIORS 0xedbf91223639800bcd5756815caf908df3b890be. Read-only.",
+        "hoodit_chart",
     ),
 ]
 
