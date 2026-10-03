@@ -6,7 +6,7 @@ use hoodit::app::HooditApp;
 use hoodit::tools::*;
 use serde_json::Value;
 
-const MAX_REPLY: usize = 2500;
+const MAX_REPLY: usize = 3000;
 
 fn main() {
     let path = std::env::args().nth(1).expect("plan.json");
@@ -48,7 +48,7 @@ fn main() {
             other => Err(format!("unknown tool {other}")),
         };
         let text = match out {
-            Ok(r) => serde_json::to_string(&r.value).unwrap(),
+            Ok(r) => serde_json::to_string_pretty(&r.value).unwrap(),
             Err(e) => format!("ERR {e}"),
         };
         let size = text.len();

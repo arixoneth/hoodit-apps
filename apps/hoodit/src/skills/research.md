@@ -12,7 +12,7 @@
 
 ## Plan the turn
 Make independent calls in the same step.
-- "anything good?" / "what's early": scan (bonding or new for early, trending for now) → chart (range 6h, context_range life) and trades for the 2–3 best rows in one parallel step → answer. Holders view=top only for the coin you lead with.
+- "anything good?" / "what's early": one scan (bonding or new for early, trending for now; a second board only if the first is empty) → chart (range 6h, context_range life) and trades for the 2–3 best rows in one parallel step → answer. Holders view=top only for the coin you lead with.
 - "is X good?": find if you only have a ticker → token, chart and trades in parallel → answer. Holders when concentration or the dev matters.
 - "can I get out of 0.2 eth?": exit round_trip. "who's selling?": trades. "is the dev a serial rugger?": holders view=dev.
 - Bag check: wallet → token for the 1–3 biggest positions.

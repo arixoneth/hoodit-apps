@@ -3,7 +3,7 @@
 
 Each case is a fresh guest conversation, run `--runs` times. Mechanical
 checks are scored here (final answer, address and link provenance, unit
-traps, tool and time budgets, no trade preparation, reply sizes); every run
+traps, tool and time budgets, no trade preparation, reply sizes as the model sees them); every run
 is saved with its tool calls so the answers can be graded against the
 evidence with the rubric in tests/evals/cases.json. Exits 1 when any run
 fails a check.
@@ -30,7 +30,7 @@ spec = importlib.util.spec_from_file_location("smoke", ROOT / "scripts" / "hoodi
 smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(smoke)
 
-MAX_REPLY = 2500
+MAX_REPLY = 3000  # chars as the model sees them (the host pretty-prints tool JSON)
 TRADE_TOOLS = {"lifi_prepare_swap_batch", "send_transaction", "sign_typed_data", "prepare_transaction"}
 ADDRESS = re.compile(r"0x[0-9a-fA-F]{40}")
 URL = re.compile(r"https?://[^\s)\]>\"'`*]+")

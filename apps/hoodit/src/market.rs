@@ -257,7 +257,8 @@ impl Basics {
     }
 }
 
-/// Compact scan row, about 400 chars.
+/// Compact scan row, about 550 chars once pretty-printed. Price is on the
+/// card; FDV carries the size here.
 pub fn row(result: &Value) -> Value {
     let b = Basics::of(result);
     let f = |k: &str| field(result, &[k]);
@@ -275,7 +276,6 @@ pub fn row(result: &Value) -> Value {
         field(result, &["token", "createdAt"]).or(f("createdAt")),
     );
     let rest = json!({
-        "price_usd": price(f("priceUSD")),
         "fdv_usd": usd(f("marketCap")),
         "liquidity_usd": usd(f("liquidity")),
         "volume_24h_usd": usd(f("volume24")),
@@ -553,20 +553,20 @@ mod tests {
     }
 
     #[test]
-    fn five_widest_scan_rows_fit_one_reply() {
+    fn four_widest_scan_rows_fit_one_reply() {
         let mut rows: Vec<Value> = recorded()
             .iter()
             .map(|r| {
                 let mut row = crate::shape::compact(row(r));
                 row["curve_pct"] = json!(85.4);
-                row["symbol"] = json!("X".repeat(20));
+                row["symbol"] = json!("X".repeat(12));
                 row
             })
             .collect();
         rows.sort_by_key(|r| std::cmp::Reverse(crate::shape::size(r)));
-        rows.truncate(5);
+        rows.truncate(4);
         let reply = crate::shape::ok(
-            json!({ "board": "bonding curves, closest to graduating", "scanned": 10, "returned": 5, "rows": rows }),
+            json!({ "board": "bonding curves, closest to graduating", "scanned": 10, "returned": 4, "rows": rows }),
             &["2 Pons launch records unreadable; their curve % is unknown".into()],
         );
         let reply = crate::shape::compact(reply);

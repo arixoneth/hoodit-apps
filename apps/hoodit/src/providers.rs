@@ -121,7 +121,8 @@ pub async fn codex(
             .is_some_and(|m| m.values().all(Value::is_null))
     {
         let message = errors.unwrap_or_else(|| "no data returned".into());
-        if message.to_ascii_lowercase().contains("not found") {
+        let lower = message.to_ascii_lowercase();
+        if lower.contains("not found") || lower.contains("could not find") {
             return Err(Fail::new(
                 "NOT_FOUND",
                 "no Robinhood Chain market indexed for this exact contract; check the address and chain",

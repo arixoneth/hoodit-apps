@@ -3,9 +3,10 @@
 //! `null` means unknown, never zero.
 use serde_json::{Map, Value, json};
 
-/// Longest reply a tool may return, in serialized chars. Guests share a
-/// 64k-byte model input with the prompt, skills and whole history.
-pub const MAX_REPLY: usize = 2500;
+/// Longest reply a tool may return, in chars as the model sees it: the host
+/// pretty-prints tool JSON. Guests share a 64k-byte model input with the
+/// prompt, skills and whole history.
+pub const MAX_REPLY: usize = 3000;
 
 /// Reads a provider number that may arrive as a JSON number or a string.
 pub fn num(value: &Value) -> Option<f64> {
@@ -153,15 +154,39 @@ pub fn compact(value: Value) -> Value {
     }
 }
 
+/// Chars the model sees for this value (pretty-printed, like the host does).
 pub fn size(value: &Value) -> usize {
-    serde_json::to_string(value).map(|s| s.len()).unwrap_or(0)
+    serde_json::to_string_pretty(value)
+        .map(|s| s.len())
+        .unwrap_or(0)
+}
+
+/// A number series as one space-separated string, so pretty-printing
+/// doesn't spend a line per number. Unknown values are `-`.
+pub fn series(values: impl IntoIterator<Item = Option<f64>>, digits: i32) -> Value {
+    let text: Vec<String> = values
+        .into_iter()
+        .map(|v| match v {
+            Some(x) => {
+                let x = sig(x, digits);
+                if x.fract() == 0.0 && x.abs() < 1e15 {
+                    format!("{}", x as i64)
+                } else {
+                    format!("{x}")
+                }
+            }
+            None => "-".into(),
+        })
+        .collect();
+    json!(text.join(" "))
 }
 
 /// Keeps a reply under [`MAX_REPLY`] by dropping the last items of its
 /// largest list of objects (rows, holders, trades) and saying so.
 pub fn fit(mut value: Value) -> Value {
     let mut trimmed: Option<(String, usize)> = None;
-    while size(&value) > MAX_REPLY {
+    // Leave room for the gap note added below.
+    while size(&value) > MAX_REPLY - 100 {
         let Some(map) = value.as_object_mut() else {
             break;
         };
@@ -270,6 +295,14 @@ mod tests {
         assert_eq!(out["status"], "partial");
         assert_eq!(out["small"].as_array().unwrap().len(), 2);
         assert!(out["gaps"][0].as_str().unwrap().starts_with("rows cut to"));
+    }
+
+    #[test]
+    fn series_are_one_line() {
+        assert_eq!(
+            series([Some(0.00033312), None, Some(1606.4)], 3),
+            json!("0.000333 - 1610")
+        );
     }
 
     #[test]

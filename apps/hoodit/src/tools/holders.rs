@@ -124,7 +124,7 @@ impl DynAomiTool for Holders {
                 );
             }
             let q = format!(
-                "{{ h: holders(input: {{tokenId: \"{id}\", limit: 16}}) {{ count items {{ address shiftedBalance balanceUsd firstHeldTimestamp }} }} r: tokenTopTraders(input: {{tokenAddress: \"{token}\", networkId: {n}, tradingPeriod: WEEK, limit: 5}}) {{ items {{ walletAddress realizedProfitUsd amountBoughtUsd amountSoldUsd buys sells tokenBalance labels botScore }} }} p: filterTokens(tokens: [\"{id}\"], limit: 1) {{ results {{ top10HoldersPercent priceUSD pair {{ address }} token {{ symbol creatorAddress info {{ totalSupply }} }} }} }} }}"
+                "{{ h: holders(input: {{tokenId: \"{id}\", limit: 16}}) {{ count items {{ address shiftedBalance balanceUsd firstHeldTimestamp }} }} r: tokenTopTraders(input: {{tokenAddress: \"{token}\", networkId: {n}, tradingPeriod: WEEK, limit: 4}}) {{ items {{ walletAddress realizedProfitUsd amountBoughtUsd amountSoldUsd buys sells tokenBalance labels botScore }} }} p: filterTokens(tokens: [\"{id}\"], limit: 1) {{ results {{ top10HoldersPercent priceUSD pair {{ address }} token {{ symbol creatorAddress info {{ totalSupply }} }} }} }} }}"
             );
             let (launch, fetched) = tokio::join!(
                 providers::pons_launch(&rt, &token),
@@ -148,7 +148,7 @@ impl DynAomiTool for Holders {
                 .and_then(Value::as_array)
                 .cloned()
                 .unwrap_or_default();
-            let shown: Vec<&Value> = items.iter().take(10).collect();
+            let shown: Vec<&Value> = items.iter().take(8).collect();
             let addresses: Vec<String> = shown
                 .iter()
                 .map(|h| {

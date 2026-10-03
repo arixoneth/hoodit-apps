@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 const CACHE_CAPACITY: usize = 4096;
 /// Paid Codex requests one turn may make before tools return partial data.
-pub const TURN_REQUEST_BUDGET: u32 = 10;
+pub const TURN_REQUEST_BUDGET: u32 = 16;
 /// Paid Codex requests per host per UTC day (~$0.001 each).
 pub const DAILY_REQUEST_CAP: u32 = 5000;
 /// Keyless LI.FI allows ~100 quotes per 2 h per IP; stay well under it.

@@ -146,7 +146,7 @@ impl DynAomiTool for Chart {
     type App = HooditApp;
     type Args = ChartArgs;
     const NAME: &'static str = "hoodit_chart";
-    const DESCRIPTION: &'static str = "USD price candles for a Robinhood Chain token, curve phase included, plus facts computed from the same bars (change, high/low, distance from high and low, volume trend as a ratio _x, whether recent lows sit above early lows). Pick a range (1h, 6h, 24h, 7d, 30d, life) and get 24–60 bars; add context_range for a second, wider zoom as closes. Times: t0 is unix seconds, t_min are minutes after t0. Read before any claim about chart structure.";
+    const DESCRIPTION: &'static str = "USD price candles for a Robinhood Chain token, curve phase included, plus facts computed from the same bars (change, high/low, distance from high and low, volume trend as a ratio _x, whether recent lows sit above early lows). Pick a range (1h, 6h, 24h, 7d, 30d, life) and get 24–60 bars; add context_range for a second, wider zoom as closes. Series (t_min, h, l, c, v_usd) are space-separated, one value per bar, `-` = no data. t0 is unix seconds, t_min minutes after t0. Read before any claim about chart structure.";
 
     fn run(app: &HooditApp, args: ChartArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         exec(app, &ctx, |rt, mut call| async move {
@@ -221,11 +221,7 @@ impl DynAomiTool for Chart {
             let vol = floats(&m["volume"]);
             let (buy, sell) = (floats(&m["buyVolume"]), floats(&m["sellVolume"]));
             let sum = |s: &[Option<f64>]| s.iter().flatten().sum::<f64>();
-            let sig3 = |s: &[Option<f64>]| {
-                s.iter()
-                    .map(|v| v.map(|x| json!(shape::sig(x, 3))).unwrap_or(Value::Null))
-                    .collect::<Vec<_>>()
-            };
+            let sig3 = |s: &[Option<f64>]| shape::series(s.iter().copied(), 3);
             let covered_h =
                 (t.last().unwrap_or(&0) - t.first().unwrap_or(&0) + step) as f64 / 3600.0;
             let mut out = json!({
@@ -237,9 +233,9 @@ impl DynAomiTool for Chart {
                 "facts": facts(&o, &h, &l, &c, &vol),
                 "flow_usd": { "buy": usd(Some(sum(&buy))), "sell": usd(Some(sum(&sell))) },
                 "t0": t[0],
-                "t_min": t.iter().map(|x| (x - t[0]) / 60).collect::<Vec<_>>(),
+                "t_min": shape::series(t.iter().map(|x| Some(((x - t[0]) / 60) as f64)), 15),
                 "h": sig3(&h), "l": sig3(&l), "c": sig3(&c),
-                "v_usd": vol.iter().map(|v| usd(*v)).collect::<Vec<_>>(),
+                "v_usd": shape::series(vol.iter().copied(), 3),
             });
             if let Some(cr) = context {
                 let x = &data["x"];

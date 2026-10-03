@@ -90,7 +90,7 @@ impl DynAomiTool for Scan {
     type App = HooditApp;
     type Args = ScanArgs;
     const NAME: &'static str = "hoodit_scan";
-    const DESCRIPTION: &'static str = "List Robinhood Chain memecoins from one board (trending, new, bonding curve, just graduated) with filters. Each row: launchpad and stage, pair token, trade_support (can LI.FI trade it now), age, price, FDV, liquidity, 24h volume, % change 1h/24h, last-hour buy and sell dollars, holders, and the share held by top 10 / dev / snipers (percent 0–100). Pons curve rows carry curve_pct = funds raised ÷ graduation target, as Pons shows it. A ranked starting list, not picks and not every coin on the chain.";
+    const DESCRIPTION: &'static str = "List Robinhood Chain memecoins from one board (trending, new, bonding curve, just graduated) with filters. Each row: launchpad and stage, pair token, trade_support (can LI.FI trade it now), age, FDV, liquidity, 24h volume, % change 1h/24h, last-hour buy and sell dollars, holders, and the share held by top 10 / dev / snipers (percent 0–100). Pons curve rows carry curve_pct = funds raised ÷ graduation target, as Pons shows it. A ranked starting list, not picks and not every coin on the chain.";
 
     fn run(app: &HooditApp, args: ScanArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
         exec(app, &ctx, |rt, mut call| async move {

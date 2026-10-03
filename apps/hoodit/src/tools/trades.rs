@@ -78,6 +78,18 @@ impl DynAomiTool for Trades {
                 call.gap(note);
             }
             let s = data.pointer("/s/results/0").cloned().unwrap_or(Value::Null);
+            let no_events = ["/e/items", "/b/items"].iter().all(|p| {
+                data.pointer(p)
+                    .and_then(Value::as_array)
+                    .is_none_or(|a| a.is_empty())
+            });
+            if s.is_null() && no_events {
+                return shape::error(
+                    "NOT_FOUND",
+                    "no Robinhood Chain market indexed for this exact contract; check the address and chain",
+                    None,
+                );
+            }
             let window = |w: &str| {
                 let (b, sl) = (
                     field(&s, &[&format!("buyVolume{w}")]),

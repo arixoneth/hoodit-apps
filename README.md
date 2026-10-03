@@ -77,7 +77,7 @@ Two operator secrets, set per application in Aomi Build → Environment:
 | `LIFI_API_KEY` | LI.FI integrator key. Without it quotes fall back to the keyless allowance (about 40 an hour). |
 
 Missing secrets make the affected tools return `UNCONFIGURED` instead of failing
-the app. Spend is capped in-process: ten paid requests per answer and 5,000 per
+the app. Spend is capped in-process: 16 paid requests per answer and 5,000 per
 host per UTC day, with stale cache served when a provider fails.
 
 Nine read tools, none owned by a skill so they work in every thread:
@@ -96,8 +96,8 @@ Nine read tools, none owned by a skill so they work in every thread:
 
 The always-on preamble sets the voice and evidence rules; three short skills
 (`hoodit/research`, `hoodit/trade`, `hoodit/watch`) are playbooks. Every reply
-stays under 2,500 characters because guest chats share a 64 kB model input with
-the whole history.
+stays under 3,000 characters as the model sees it (the host pretty-prints tool
+JSON), because guest chats share a 64 kB model input with the whole history.
 
 ```bash
 cargo test -p hoodit
