@@ -1,174 +1,78 @@
 "use client";
 
 /*
- * Hoodit branding layer for the embedded Aomi widget.
- *
- * `@aomi-labs/widget-lib` hard-codes its own mark, wordmark, composer
- * placeholder, and welcome suggestions. Visual swaps live in app.css; this
- * file handles the parts CSS cannot reach: placeholder text, the welcome
- * title, and a Hoodit-specific set of suggested actions that send through
- * the widget's own composer.
+ * Hoodit welcome screen inside the Aomi widget: title and suggested trades.
+ * AomiWidget has no props for either yet (placeholders and logos are CSS in
+ * app.css), so this patches the welcome root. Delete it once widget-lib
+ * forwards welcomeTitle and suggestions.
  */
 
 import { useEffect, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 
 const WELCOME_TITLE = "What should we ape today?";
-const WELCOME_PLACEHOLDER = "Tell Hoodit what to trade…";
-const REPLY_PLACEHOLDER = "Reply to Hoodit…";
 
 const SUGGESTIONS = [
-  {
-    label: "Buy $100 of NVDA",
-    prompt: "Buy $100 of NVDA stock token on Robinhood Chain",
-  },
+  { label: "Buy $100 of NVDA", prompt: "Buy $100 of NVDA stock token on Robinhood Chain" },
   {
     label: "Research TSLA on-chain",
     prompt: "Show the on-chain market and liquidity for the canonical TSLA stock token on Robinhood Chain",
   },
   {
     label: "Show my Robinhood Chain balances",
-    prompt:
-      "Show my wallet balances on Robinhood Chain without fetching valuation quotes",
+    prompt: "Show my wallet balances on Robinhood Chain without fetching valuation quotes",
   },
-  {
-    label: "Sell half my AAPL",
-    prompt: "Sell half of my AAPL stock token position on Robinhood Chain",
-  },
+  { label: "Sell half my AAPL", prompt: "Sell half of my AAPL stock token position on Robinhood Chain" },
   {
     label: "Find active pools",
     prompt: "Show the most active pools on Robinhood Chain and explain the liquidity and recent volume",
   },
 ];
 
-/** The composer is a contenteditable box; its placeholder is a sibling span
- * rendered only while the box is empty. */
-const composerSelector = '.aui-composer-input [role="textbox"]';
-
-function patchText(root: HTMLElement) {
-  root.querySelectorAll<HTMLElement>(composerSelector).forEach((input) => {
-    const placeholder = input.previousElementSibling;
-    if (!(placeholder instanceof HTMLElement)) return;
-    const want = input.closest(".aui-thread-welcome-root")
-      ? WELCOME_PLACEHOLDER
-      : REPLY_PLACEHOLDER;
-    if (placeholder.textContent !== want) placeholder.textContent = want;
-  });
-  root
-    .querySelectorAll<HTMLElement>(".aui-thread-welcome-title")
-    .forEach((title) => {
-      if (title.textContent !== WELCOME_TITLE)
-        title.textContent = WELCOME_TITLE;
-    });
-  root
-    .querySelectorAll<HTMLButtonElement>(
-      'button[aria-label="Switch Aomi product"]',
-    )
-    .forEach((button) => {
-      button.setAttribute("aria-label", "Hoodit");
-      button.tabIndex = -1;
-    });
-}
-
-/** Fill the widget's composer the way typing would, so its own input
- * handler syncs the text into the thread, then send. */
-function sendPrompt(root: HTMLElement, prompt: string) {
-  const input = root.querySelector<HTMLElement>(composerSelector);
+/** Type into the widget's composer the way a user would, then submit its form. */
+function sendPrompt(welcome: HTMLElement, prompt: string) {
+  const input = welcome.querySelector<HTMLElement>('.aui-composer-input [role="textbox"]');
   if (!input) return;
   input.textContent = prompt;
   input.dispatchEvent(new Event("input", { bubbles: true }));
-  requestAnimationFrame(() => {
-    const send = root.querySelector<HTMLButtonElement>(
-      "button.aui-composer-send",
-    );
-    if (send && !send.disabled) send.click();
-    else input.focus();
-  });
+  requestAnimationFrame(() => input.closest("form")?.requestSubmit());
 }
 
-function sameList(a: HTMLElement[], b: HTMLElement[]) {
-  return a.length === b.length && a.every((el, i) => el === b[i]);
-}
-
-/** Static chip standing in for the widget's network selector, which hides itself when only one chain is configured. */
-function ChainLock() {
-  return (
-    <span
-      className="hoodit-chain-lock"
-      title="Hoodit trades on Robinhood Chain only"
-    >
-      <i aria-hidden="true" />
-      Robinhood Chain
-      <svg viewBox="0 0 16 16" width="11" height="11" aria-hidden="true">
-        <path
-          d="M4 7V5a4 4 0 1 1 8 0v2h1v7H3V7h1Zm2 0h4V5a2 2 0 1 0-4 0v2Z"
-          fill="currentColor"
-        />
-      </svg>
-    </span>
-  );
-}
-
-export function HooditBrand({
-  frameRef,
-}: {
-  frameRef: RefObject<HTMLElement | null>;
-}) {
-  const [suggestionHost, setSuggestionHost] = useState<HTMLElement | null>(
-    null,
-  );
-  const [controlHosts, setControlHosts] = useState<HTMLElement[]>([]);
+export function HooditBrand({ frameRef }: { frameRef: RefObject<HTMLElement | null> }) {
+  const [welcome, setWelcome] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
-    const root = frameRef.current;
-    if (!root) return;
+    const frame = frameRef.current;
+    if (!frame) return;
     const sync = () => {
-      patchText(root);
-      const host = root.querySelector<HTMLElement>(
-        ".aui-thread-welcome-suggestions",
-      );
-      setSuggestionHost((current) => (current === host ? current : host));
-      const bars = [
-        ...root.querySelectorAll<HTMLElement>(".aui-composer-action-scroll"),
-      ];
-      setControlHosts((current) => (sameList(current, bars) ? current : bars));
+      const root = frame.querySelector<HTMLElement>(".aui-thread-welcome-root");
+      const title = root?.querySelector(".aui-thread-welcome-title");
+      if (title && title.textContent !== WELCOME_TITLE) title.textContent = WELCOME_TITLE;
+      setWelcome(root);
     };
     sync();
     const observer = new MutationObserver(sync);
-    observer.observe(root, { childList: true, subtree: true });
+    observer.observe(frame, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, [frameRef]);
 
-  const chips = controlHosts.map((host, i) =>
-    createPortal(<ChainLock key={i} />, host),
-  );
-  if (!suggestionHost) return <>{chips}</>;
-  return (
-    <>
-      {chips}
-      {createPortal(
-        <div
-          className="hoodit-suggestions"
-          role="group"
-          aria-label="Suggested trades"
+  const host = welcome?.querySelector(".aui-thread-welcome-suggestions");
+  if (!welcome || !host) return null;
+  return createPortal(
+    <div className="hoodit-suggestions" role="group" aria-label="Suggested trades">
+      {SUGGESTIONS.map((item) => (
+        <button
+          key={item.label}
+          type="button"
+          className="hoodit-suggestion"
+          aria-label={item.prompt}
+          onClick={() => sendPrompt(welcome, item.prompt)}
         >
-          {SUGGESTIONS.map((item) => (
-            <button
-              key={item.label}
-              type="button"
-              className="hoodit-suggestion"
-              aria-label={item.prompt}
-              onClick={() =>
-                frameRef.current && sendPrompt(frameRef.current, item.prompt)
-              }
-            >
-              <i aria-hidden="true" />
-              {item.label}
-            </button>
-          ))}
-        </div>,
-        suggestionHost,
-      )}
-    </>
+          <i aria-hidden="true" />
+          {item.label}
+        </button>
+      ))}
+    </div>,
+    host,
   );
 }

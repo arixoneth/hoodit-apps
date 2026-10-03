@@ -82,24 +82,26 @@
 }
 
 /* ---------- Hoodit branding inside the widget ----------
-   The widget ships an Aomi mark, wordmark, and product switcher. Swap them
-   for the Hoodit cat here; text-level changes live in hoodit-brand.tsx. */
+   The widget ships an Aomi mark, wordmark, product switcher and placeholders,
+   with no props for them yet. Swap them here; the welcome title and
+   suggestions live in hoodit-brand.tsx. */
 .app-frame .aomi-sidebar-header-logo { display: inline-flex; align-items: center; gap: 9px; }
 .app-frame .aomi-sidebar-header-logo > * { display: none; }
 .app-frame .aomi-sidebar-header-logo::before { content: ""; width: 26px; height: 26px; border-radius: 50%; background: url("/hoodit-logo.jpg") center / cover; }
 .app-frame .aomi-sidebar-header-logo::after { content: "HOODIT"; font-family: var(--font-display); font-size: 14px; letter-spacing: .08em; color: var(--ink); }
-.app-frame button[aria-label="Hoodit"], .app-frame button[aria-label="Switch Aomi product"] { pointer-events: none; }
-.app-frame button[aria-label="Hoodit"] > :not(.aomi-sidebar-header-logo), .app-frame button[aria-label="Switch Aomi product"] > :not(.aomi-sidebar-header-logo) { display: none; }
+.app-frame button[aria-label="Switch Aomi product"] { pointer-events: none; }
+.app-frame button[aria-label="Switch Aomi product"] > :not(.aomi-sidebar-header-logo) { display: none; }
 .app-frame .aui-thread-welcome-message > svg { display: none; }
 .app-frame .aui-thread-welcome-message::before { content: ""; width: 88px; height: 88px; border-radius: 50%; background: url("/hoodit-logo.jpg") center / cover; box-shadow: 5px 5px 0 var(--ink); }
 .app-frame .aui-assistant-message-row > svg { display: none; }
 .app-frame .aui-assistant-message-row:has(> svg)::before { content: ""; flex: none; width: 28px; height: 28px; margin-top: 2px; border-radius: 50%; background: url("/hoodit-logo.jpg") center / cover; }
+/* The placeholder is a decorative span drawn behind the empty textbox. */
+.app-frame .aui-composer-input span:has(+ [role="textbox"]) { font-size: 0; }
+.app-frame .aui-composer-input span:has(+ [role="textbox"])::before { content: "Reply to Hoodit…"; font-size: 13px; }
+.app-frame .aui-thread-welcome-root .aui-composer-input span:has(+ [role="textbox"])::before { content: "Tell Hoodit what to trade…"; }
 .app-frame .aui-thread-welcome-suggestions > .aui-thread-welcome-suggestions-track { display: none; }
 .hoodit-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding: 0 8px; }
 .hoodit-suggestion { display: inline-flex; align-items: center; gap: 8px; padding: 9px 14px; border: 2px solid var(--ink); border-radius: 999px; background: #fbf6ea; color: var(--ink); font: 600 13px var(--font-body); box-shadow: 3px 3px 0 var(--ink); cursor: pointer; transition: transform .12s, box-shadow .12s, background .12s; }
 .hoodit-suggestion:hover { transform: translate(-1px, -1px); box-shadow: 4px 4px 0 var(--ink); background: var(--mint); }
 .hoodit-suggestion i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); border: 1.5px solid var(--ink); }
 @media (max-width: 700px) { .hoodit-suggestion:nth-child(n+4) { display: none; } }
-.hoodit-chain-lock { order: -1; display: inline-flex; align-items: center; gap: 7px; margin-right: 6px; padding: 6px 11px; border: 2px solid var(--ink); border-radius: 999px; background: var(--green); color: var(--paper); font: 700 11px var(--font-mono); letter-spacing: .04em; white-space: nowrap; cursor: default; }
-.hoodit-chain-lock i { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
-.hoodit-chain-lock svg { opacity: .8; }
