@@ -73,6 +73,13 @@ on-chain swaps) and `hoodit_check_exit`. The tools compute setup flags such as
 `extended`, `fading`, `churn` and `thin_exit`, so the model weighs a blow-off
 top as late rather than reading momentum as quality.
 
+Same-ticker copycats are common on Robinhood Chain: a scam contract reuses a
+real coin's name, parks deep liquidity nobody trades, and often stays mintable.
+`hoodit_search` resolves the real contract from its share of the ticker's
+trading volume and its DexScreener profile and lists copycats apart, and
+`hoodit_get_token` flags `parked_liquidity` and `copycat_risk` when a pasted
+contract looks like one.
+
 Trades fill a minute or two after the host simulates them, so `hoodit_get_token`
 and `hoodit_check_exit` size a slippage tolerance for that wait: one typical
 5-minute move (from DexScreener's 5m and 1h changes), floored by pool depth

@@ -1,4 +1,4 @@
-use super::{arg, failure, now};
+use super::{arg, failure, now, search::busier_namesake};
 use crate::app::{Call, HooditApp};
 use crate::market::{Lifecycle, Slippage, Snapshot, deepest_pool, flags, main_pool};
 use crate::model::{self, opt, usd};
@@ -122,12 +122,17 @@ impl DynAomiTool for GetToken {
             .take(4)
             .map(|p| json!({"pool_id":p.pool_id,"venue":p.venue,"pair":p.pair(),"liquidity_usd":opt(p.liquidity_usd, usd),"volume_24h_usd":opt(p.volume.h24, usd)}))
             .collect();
+        let profile = pools.iter().any(|p| p.token == token && p.profile);
+        let mut flags = flags(&main, now);
+        if (!profile || main.parked_liquidity()) && !main.symbol.is_empty() {
+            flags.extend(busier_namesake(&dex, &call, &main));
+        }
         let out = json!({
-            "token": {"address": token, "symbol": main.symbol, "name": main.name},
+            "token": {"address": token, "symbol": main.symbol, "name": main.name, "dexscreener_profile": profile},
             "launchpad": lifecycle.view(),
             "main_pool": main.view(now),
             "other_pools": other_pools,
-            "flags": flags(&main, now),
+            "flags": flags,
             "slippage": Slippage::of(&main, main.kind == Some("curve")).view(),
             "security": security,
             "links": dex.token_links(&call, &token),

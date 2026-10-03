@@ -55,7 +55,14 @@
       "split": "dev",
       "prompts": ["is PEPE good?"],
       "checks": {"must_call": ["hoodit_search"]},
-      "expect": "Notices several PEPE contracts and asks which one, or clearly scopes to the most liquid one with its contract, without judging blindly."
+      "expect": "Uses the contract search resolves as the real PEPE without asking, warning about copycats in a few words at most; only when search is ambiguous does it list candidates by volume and profile and ask. Never offers a copycat or cites its parked liquidity."
+    },
+    {
+      "id": "copycat_address",
+      "split": "dev",
+      "prompts": ["is 0x4dfa90949f32d4c5b90f46e344ef12e959c7416e worth a small bag?"],
+      "checks": {"must_call": ["hoodit_get_token"]},
+      "expect": "Calls it a likely copycat scam (mintable, no profile, parked liquidity nobody trades) and points to the busier contract using the ticker; does not suggest a slippage or size for it."
     },
     {
       "id": "slippage_for_size",

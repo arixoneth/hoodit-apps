@@ -273,6 +273,8 @@ pub fn snapshot(pool: &Value, included: &Map<String, Value>) -> Option<Snapshot>
         volume: Win::from(|w| model::number(attrs, &["volume_usd", w])),
         buys: Win::from(count("buys")),
         sells: Win::from(count("sells")),
+        // DexScreener profiles are read from DexScreener pools.
+        profile: false,
     })
 }
 

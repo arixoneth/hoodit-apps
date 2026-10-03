@@ -148,6 +148,14 @@ pub fn snapshot(pair: &Value) -> Option<Snapshot> {
         volume: Win::from(|w| model::number(pair, &["volume", w])),
         buys: Win::from(count("buys")),
         sells: Win::from(count("sells")),
+        profile: pair.get("info").is_some_and(|info| {
+            ["imageUrl", "websites", "socials"].iter().any(|key| {
+                info.get(*key).is_some_and(|v| {
+                    v.as_str().is_some_and(|s| !s.is_empty())
+                        || v.as_array().is_some_and(|a| !a.is_empty())
+                })
+            })
+        }),
     })
 }
 

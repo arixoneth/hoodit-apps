@@ -46,6 +46,9 @@ pub struct Snapshot {
     pub volume: Win<f64>,
     pub buys: Win<u64>,
     pub sells: Win<u64>,
+    /// The project claimed a DexScreener profile (image, website or socials).
+    /// Copycats rarely have one.
+    pub profile: bool,
 }
 
 impl Snapshot {
@@ -55,6 +58,11 @@ impl Snapshot {
     }
     pub fn txns_24h(&self) -> Option<u64> {
         Some(self.buys.h24? + self.sells.h24?)
+    }
+    /// Deep liquidity nobody trades against: a copycat's parked or fake depth.
+    pub fn parked_liquidity(&self) -> bool {
+        let liquidity = self.liquidity_usd.unwrap_or(0.0);
+        liquidity >= 20_000.0 && self.volume.h24.unwrap_or(0.0) < liquidity * 0.01
     }
     pub fn pair(&self) -> String {
         format!("{}/{}", self.symbol, self.quote_symbol)
@@ -117,6 +125,13 @@ pub fn flags(s: &Snapshot, now: i64) -> Vec<String> {
     if let Some(turnover) = ratio(s.volume.h24, s.liquidity_usd).filter(|t| *t >= 20.0) {
         flags.push(format!("churn: 24h volume is {turnover:.0}x liquidity"));
     }
+    if s.parked_liquidity() {
+        flags.push(format!(
+            "parked_liquidity: ${:.0} liquidity but ${:.0} traded in 24h",
+            s.liquidity_usd.unwrap_or(0.0),
+            s.volume.h24.unwrap_or(0.0)
+        ));
+    }
     if let Some(depth) = ratio(s.fdv_usd, s.liquidity_usd).filter(|d| *d >= 50.0) {
         flags.push(format!("thin_exit: fdv is {depth:.0}x liquidity"));
     }
@@ -164,13 +179,16 @@ pub const MAX_SLIPPAGE_BPS: u32 = 1000;
 pub struct Slippage {
     pub needed_bps: u32,
     pub basis: String,
+    /// Parked liquidity is not depth a fill can rely on.
+    pub parked: bool,
 }
 
 impl Slippage {
     pub fn of(s: &Snapshot, curve: bool) -> Self {
         let liquidity = s.liquidity_usd.unwrap_or(0.0);
+        let parked = s.parked_liquidity();
         let floor: u32 = match liquidity {
-            _ if curve => 300,
+            _ if curve || parked => 300,
             l if l >= 250_000.0 => 50,
             l if l >= 50_000.0 => 100,
             l if l >= 10_000.0 => 200,
@@ -183,12 +201,15 @@ impl Slippage {
         let drift = ((move_pct * 100.0 / 25.0).ceil() * 25.0).min(f64::from(u32::MAX)) as u32;
         let depth = if curve {
             "pons curve".to_string()
+        } else if parked {
+            format!("parked liquidity ${liquidity:.0} that nobody trades")
         } else {
             format!("liquidity ${liquidity:.0}")
         };
         Self {
             needed_bps: floor.max(drift),
             basis: format!("typical 5m move {move_pct:.1}%, {depth}"),
+            parked,
         }
     }
     pub fn suggested_bps(&self) -> u32 {
@@ -196,6 +217,7 @@ impl Slippage {
     }
     pub fn tradeable(&self) -> &'static str {
         match self.needed_bps {
+            _ if self.parked => "unproven_depth",
             n if n <= SUGGESTED_MAX_BPS => "yes",
             n if n <= MAX_SLIPPAGE_BPS => "only_with_explicit_ok",
             _ => "too_volatile",
@@ -372,9 +394,26 @@ mod tests {
     }
 
     #[test]
+    fn idle_deep_pool_is_parked_liquidity() {
+        let mut parked = snapshot();
+        parked.liquidity_usd = Some(602_000.0);
+        parked.volume.h24 = Some(3.0);
+        let joined = flags(&parked, 86_400).join(" | ");
+        assert!(
+            joined.contains("parked_liquidity: $602000 liquidity but $3 traded"),
+            "{joined}"
+        );
+        assert!(!flags(&snapshot(), 86_400).join(" ").contains("parked"));
+    }
+
+    #[test]
     fn slippage_scales_with_depth_and_recent_moves() {
         let deep = Snapshot {
             liquidity_usd: Some(400_000.0),
+            volume: Win {
+                h24: Some(1_000_000.0),
+                ..Default::default()
+            },
             change: Win {
                 m5: Some(0.2),
                 h1: Some(-1.0),
@@ -385,6 +424,9 @@ mod tests {
         let calm = Slippage::of(&deep, false);
         assert_eq!((calm.suggested_bps(), calm.tradeable()), (50, "yes"));
         assert_eq!(Slippage::of(&deep, true).needed_bps, 300);
+        let mut idle = deep.clone();
+        idle.volume.h24 = Some(3.0);
+        assert_eq!(Slippage::of(&idle, false).tradeable(), "unproven_depth");
 
         let mut thin = deep.clone();
         thin.liquidity_usd = Some(30_000.0);

@@ -5,7 +5,7 @@ Read-only research on Robinhood Chain coins. Research never stages a trade; the 
 ## Tools
 
 - `hoodit_discover`: one page of a market feed with each coin's numbers, launchpad stage, and setup flags. `trending` (window `1h` for right now, `6h` default, `24h` for the day), `new` for fresh pools, `launchpad` for live Pons curves with progress, `volume` for the most traded.
-- `hoodit_search`: ticker or name to contracts. Same-ticker clones are common. Follow its `ambiguous` note: proceed with the contract it names as dominant (mentioning the clones in a few words), or show the candidates and ask when none dominates.
+- `hoodit_search`: ticker or name to contracts. Same-ticker copycats are common. When it says `resolved`, use that contract without asking; its `copycats` are scams riding the ticker, so never list them as options or quote their liquidity, and warn about them in a few words at most. Only on `ambiguous` show the candidates with volume and profile and ask.
 - `hoodit_get_token`: launchpad stage, most active pool, other pools, flags, the slippage a chat trade needs, and GoPlus security with top holders.
 - `hoodit_get_chart`: real candles and order flow decoded from on-chain swaps. Gives structure facts, last-hour and window flow, largest trades, and top buying and selling wallets. On a very busy pool it covers the latest few hours; say so.
 - `hoodit_check_exit`: live quotes for selling a size, or `round_trip` to buy with X ETH and sell straight back, at the coin's suggested slippage or the user's.
@@ -35,6 +35,8 @@ Setup flags are facts with numbers, not verdicts:
 - `thin_exit`: FDV is huge against liquidity, so real size exits badly. Quantify it with `hoodit_check_exit`.
 - `sellers_in_control` / `buyers_in_control`: last hour's balance of buys and sells. Buy-heavy flow is not bullish by itself; on young coins it often comes just before a dump into those buyers.
 - `jumpy`: recent moves are too fast for a chat fill at Hoodit's 5% ceiling. Fine to research; for a trade see Trading.
+- `parked_liquidity`: deep liquidity that nobody trades. Copycats park liquidity to look real; it is not depth you can exit into.
+- `copycat_risk`: a busier contract uses the same ticker. Unless the user deliberately means this one, say it's likely a copycat and point to the busier contract.
 - `micro_liquidity`, `fresh`, `quiet`, `dumping`: what they say. A pool with no recent trades is dying, not a dip.
 
 Chart (`structure`): `from_high_pct` and `from_low_pct` locate price in its range. `lows_rising` and `highs_falling` compare thirds of the window. `volume_last_vs_first_third` shows whether interest is growing or fading. `last_vs_vwap_pct` shows whether recent buyers are in profit. `last_trade_minutes_ago` exposes dead pools. On a busy pool, candles and `structure` cover only `window.hours`; quote `earlier` for the whole lookback before comparing with the snapshot's 6h or 24h change. When `pricing` says the pool trades against another volatile token, use the snapshot's `change_pct` for USD moves.
@@ -43,7 +45,7 @@ Flow: transactions are not people. A wallet is the transaction sender, or the sm
 
 Launchpad: `curve` means a Pons bonding curve. Price moves with every buy, and curve depth is not pool liquidity. Near graduation (80%+), it's a race; once graduated, judge the destination pool's chart, not the old curve. `none` means no launchpad record, which is normal for regular tokens. `unknown` means the stage couldn't be read.
 
-Security: `honeypot` true, `cannot_sell_all`, or a sell tax over 10% disqualifies an ape. Null fields are unknown, never a pass. Note an owner who can change balances or taxes, mint, or blacklist. `top10_wallets_pct` excludes pools, burn and locks; above about 30% means a few wallets can dump on you. Proxy or mintable alone is not proof of a scam.
+Security: `honeypot` true, `cannot_sell_all`, or a sell tax over 10% disqualifies an ape. Null fields are unknown, never a pass. Note an owner who can change balances or taxes, mint, or blacklist. `top10_wallets_pct` excludes pools, burn and locks; above about 30% means a few wallets can dump on you. Proxy or mintable alone is not proof of a scam, but mintable plus no DexScreener profile, parked liquidity, or `copycat_risk` is the copycat pattern: call it a likely scam.
 
 ## What usually happens on this chain
 
@@ -71,8 +73,9 @@ So for memecoins, frame an ape as a short-term trade with small size and an exit
 A trade fills one to two minutes after its simulation: your reply plus the user's wallet confirmation. The minimum output is fixed when the host prepares the swap, so on a fast coin a tight tolerance fails and a loose one overpays. `slippage` sizes the tolerance for that wait: `suggested_bps` covers a typical 5-minute move with a floor set by pool depth.
 
 - Prepare only after the user says go. Use the coin's `slippage` from this conversation if it's minutes old, otherwise run `hoodit_get_token` first.
+- When asked what slippage to use, give `suggested_bps` with its basis, not a number of your own.
 - Always pass `slippage_bps` to the host swap tool: the user's number if they gave one, else `suggested_bps`. Never rely on the host default, and state it in a few words ("3% slippage").
-- `tradeable`: `yes` trades at `suggested_bps`. `only_with_explicit_ok` needs about `needed_bps`: say so and use it only if the user agrees, never above 1000 (10%). `too_volatile`: don't prepare; offer a smaller size, a wait, or a deeper coin. Refuse a tolerance below 1 bps or above 1000 and say why.
+- `tradeable`: `yes` trades at `suggested_bps`. `only_with_explicit_ok` needs about `needed_bps`: say so and use it only if the user agrees, never above 1000 (10%). `too_volatile`: don't prepare; offer a smaller size, a wait, or a deeper coin. `unproven_depth`: the liquidity is parked and nobody trades it; don't prepare, and say why. Refuse a tolerance below 1 bps or above 1000 and say why.
 - Once the host simulation passes, open the wallet straight away with a one-line summary. Research belongs before the prepare, not between it and the signature.
 - If the swap fails because the minimum output wasn't met (the host classifies it, or the revert names slippage, minimum or return amount), say how far the price moved if known, then prepare again at the same tolerance and ask before opening the wallet. Raise the tolerance only when the user asks, within the bounds above. Gas, balance, approval, and stale-simulation failures are not slippage: name the real one. A re-quote may need a fresh exact approval; follow the host's.
 - On any failure, report the stage (prepare, simulation, wallet, or on-chain), the tolerance, and roughly how old the quote was. Never call a trade done without the host's confirmation.
