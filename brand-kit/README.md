@@ -6,7 +6,7 @@ fresh clone.
 
 **Hoodit** is an AI trading bot for Robinhood Stock Tokens on Robinhood Chain.
 You talk to it in plain English, it builds the transaction, you confirm.
-It lives in Telegram and on the web.
+It lives on the web today; a Telegram bot is coming.
 
 - Live site: <https://hoodit-sepia.vercel.app>
 - Live chat app: <https://hoodit-sepia.vercel.app/app>
@@ -65,7 +65,8 @@ financial advice or guaranteed returns.
 
 [`components.png`](components.png) is a reference sheet captured from the live
 site: the chain badge, the primary button and text link, the stat row, the nav
-lockup, and the hero poster with its mustard tag and QR sticker. Match these when
+lockup, and the hero poster with its mustard tag. (The sheet predates the
+removal of the hero QR sticker; ignore that piece.) Match these when
 you build a layout. It shows how the outline, hard shadow, and slight rotation
 work together at real sizes.
 
@@ -89,8 +90,9 @@ must not reappear in marketing.
 
 ### Social card
 
-[`og.png`](../public/og.png) is the image that appears when someone shares a
-Hoodit link. **It is currently off-brand** — see [Known gaps](#6-known-gaps).
+[`og.png`](../public/og.png) (1200×630) is the image that appears when someone
+shares a Hoodit link: cream ground, the "Talk it. Trade it." headline, and the
+hero cat on its green poster plate.
 
 ---
 
@@ -203,22 +205,11 @@ logo, wordmark, or brand colours, and never phrase anything as a partnership.
 
 Worth fixing before a launch push. Flag to engineering.
 
-1. **The social card is off-brand.** [`og.png`](../public/og.png) is from the
-   previous dark-green-and-acid-yellow design. Every shared link currently
-   previews in a look the site no longer uses. It needs a rebuild in the riso
-   palette with the cat.
-2. **A stale icon file is still in the repo.** [`public/favicon.svg`](../public/favicon.svg)
-   is a leftover generic blue icon from the project template. It is not Hoodit
-   and is not what the site serves — the real favicon is
-   [`app/icon.svg`](../app/icon.svg). Ignore it; don't use it anywhere.
-3. **The QR code on the site is fake.** The hero QR is a hand-drawn pattern that
-   encodes nothing — scanning it does nothing. Never reproduce it in any
-   material. A fix that blurs it and stamps it COMING SOON is written but not
-   yet merged (branch `victor/hoodit-qr-coming-soon`).
-4. **The Telegram bot hasn't shipped.** `@HOODIT_AI` on the site is a
-   placeholder. Don't publish a handle or a "message us on Telegram" call to
-   action until the real bot is live and the handle is confirmed.
-5. **No real domain yet.** Everything points at `hoodit-sepia.vercel.app`. Hold
+1. **The Telegram bot hasn't shipped.** The site says "coming soon" and has no
+   Telegram link, handle, or QR code. Don't publish a handle, a QR code, or a
+   "message us on Telegram" call to action until the real bot is live and the
+   handle is confirmed.
+2. **No real domain yet.** Everything points at `hoodit-sepia.vercel.app`. Hold
    anything printed until the production domain is live.
 
 ---

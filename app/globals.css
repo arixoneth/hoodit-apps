@@ -7,7 +7,6 @@
   --green: #2f8b57; --green-2: #23724a; --mint: #8ed1aa;
   --salmon: #f3a39e; --blush: #e8807a;
   --mustard: #e8a93c;
-  --telegram: #229ed9;
   --ink-soft: rgba(21,22,28,.62); --ink-faint: rgba(21,22,28,.42);
   --paper-soft: rgba(244,236,217,.78); --paper-faint: rgba(244,236,217,.5);
   --font-display: "Archivo Black", Impact, "Arial Black", sans-serif;
@@ -29,8 +28,8 @@ svg { display: block; }
 .plate { position: relative; isolation: isolate; }
 .plate::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; opacity: .28; mix-blend-mode: screen; background-image: var(--noise); background-size: 260px 260px; }
 
-.display, .site-shell h1, .site-shell h2, .site-shell h3, .app-setup h1 { font-family: var(--font-display); font-weight: 400; }
-.overline, .eyebrow, .section-number, .kicker { font-family: var(--font-mono); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.site-shell h1, .site-shell h2, .site-shell h3 { font-family: var(--font-display); font-weight: 400; }
+.overline, .eyebrow, .section-number { font-family: var(--font-mono); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
 
 .site-shell { min-height: 100vh; overflow: hidden; background: var(--paper); position: relative; }
 .hero-zone { position: relative; }
@@ -41,11 +40,11 @@ svg { display: block; }
 .nav-links a { padding: 8px 12px; border: 2px solid transparent; border-radius: var(--sketch-2); font-family: var(--font-mono); font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; transition: background .15s, border-color .15s, transform .15s; }
 .nav-links a:hover { background: var(--mint); border-color: var(--ink); transform: rotate(-1.5deg); }
 .brand { display: flex; align-items: center; gap: 10px; font-family: var(--font-display); font-size: 17px; letter-spacing: -.025em; }
-.brand-mark, .agent-avatar, .scan-mark, .qr-code > span img { border-radius: 50%; border: 0; object-fit: cover; background: var(--paper); }
+.brand-mark, .agent-avatar, .scan-mark { border-radius: 50%; border: 0; object-fit: cover; background: var(--paper); }
 .brand-mark { width: 42px; height: 42px; }
-.telegram-link { display: flex; align-items: center; gap: 10px; padding: 9px 16px 9px 10px; border: 3px solid var(--ink); border-radius: var(--sketch); background: var(--salmon); box-shadow: 4px 4px 0 var(--ink); font-weight: 800; font-size: 14px; transition: transform .15s, box-shadow .15s; }
-.telegram-link:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--ink); }
-.telegram-link span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--paper); background: var(--cobalt); border: 2px solid var(--ink); font-size: 12px; }
+.nav-cta { display: flex; align-items: center; gap: 10px; padding: 9px 16px 9px 10px; border: 3px solid var(--ink); border-radius: var(--sketch); background: var(--salmon); box-shadow: 4px 4px 0 var(--ink); font-weight: 800; font-size: 14px; transition: transform .15s, box-shadow .15s; }
+.nav-cta:hover { transform: translate(-2px,-2px); box-shadow: 6px 6px 0 var(--ink); }
+.nav-cta span { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--paper); background: var(--cobalt); border: 2px solid var(--ink); font-size: 12px; }
 
 /* ---------- hero ---------- */
 .hero { width: min(1240px, calc(100% - 48px)); margin: 0 auto; padding: 72px 0 80px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: clamp(40px, 5vw, 72px); align-items: center; position: relative; z-index: 1; }
@@ -70,32 +69,11 @@ svg { display: block; }
 .hero-proof span { color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: .1em; }
 
 .hero-poster-wrap { justify-self: end; width: 100%; max-width: 600px; position: relative; }
-.hero-stage { position: relative; aspect-ratio: 1; }
-.stage-item { position: absolute; cursor: pointer; transition: transform .85s cubic-bezier(.7,-.05,.25,1.05); will-change: transform; }
-.stage-item:focus-visible { outline: 3px solid var(--cobalt); outline-offset: 6px; }
-.stage-video { inset: 0; z-index: 1; transform-origin: 100% 100%; transform: none; }
-.stage-qr { right: 12px; bottom: -24px; width: 175px; z-index: 2; transform-origin: 50% 50%; transform: none; }
-.qr-front .stage-video { transform: translate(78px, 86px) rotate(5deg) scale(.36); }
-.qr-front .stage-qr { z-index: 3; transform: translate(-128%, -100%) rotate(-1.5deg) scale(2.5); }
-.qr-front .hero-poster { transform: none; }
 .hero-poster { aspect-ratio: 1; padding: 6%; background: var(--green); border: 5px solid var(--ink); border-radius: 8px; box-shadow: 16px 16px 0 var(--ink); transform: rotate(-1.2deg); overflow: visible; transition: transform .85s cubic-bezier(.7,-.05,.25,1.05); }
 .poster-cat { display: block; width: 100%; height: 100%; object-fit: cover; border: 3px solid var(--ink); border-radius: 4px; background: var(--paper); }
 .poster-tag { position: absolute; left: -18px; top: 28px; padding: 10px 16px; border: 3px solid var(--ink); border-radius: var(--sketch-2); background: var(--mustard); box-shadow: 5px 5px 0 var(--ink); transform: rotate(-4deg); font-family: var(--font-mono); font-size: 13px; font-weight: 700; letter-spacing: .12em; }
-.qr-sticker { width: 100%; padding: 13px; background: var(--paper); border: 3px solid var(--ink); border-radius: var(--sketch); box-shadow: 6px 6px 0 var(--ink); transform: rotate(4deg); color: var(--ink); }
-.qr-code { aspect-ratio: 1; display: grid; grid-template-columns: repeat(21,1fr); background: var(--paper); padding: 4px; position: relative; }
-.qr-code i { aspect-ratio: 1; background: transparent; }
-.qr-code i.filled { background: var(--ink); }
-.qr-code > span { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 50px; height: 50px; border: 4px solid var(--paper); border-radius: 50%; background: var(--paper); }
-.qr-code > span img { width: 100%; height: 100%; border-width: 2px; }
-/* The veil must paint above the QR cells for backdrop-filter to reach them, so it
-   carries a z-index and the logo and stamp are lifted above it. */
-.qr-code.is-soon::before { content: ""; position: absolute; inset: 0; z-index: 1; backdrop-filter: blur(3.5px); }
-.qr-code.is-soon > span, .qr-soon { z-index: 2; }
-.qr-soon { position: absolute; left: 50%; bottom: 12%; padding: 6px 10px; border: 3px solid var(--ink); border-radius: var(--sketch-2); background: var(--mustard); box-shadow: 3px 3px 0 var(--ink); transform: translateX(-50%) rotate(-6deg); font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .12em; white-space: nowrap; }
-.qr-caption { padding: 10px 2px 0; display: flex; justify-content: space-between; gap: 10px; white-space: nowrap; font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; }
-.qr-caption b { color: var(--cobalt); }
-.hero-qr-note { margin-top: 70px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
-.hero-qr-note i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); border: 2px solid var(--ink); }
+.hero-note { margin-top: 40px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-faint); font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.hero-note i { width: 8px; height: 8px; border-radius: 50%; background: var(--green); border: 2px solid var(--ink); }
 
 /* ---------- demo widget ---------- */
 .widget-demo-section { padding: 40px 0 120px; display: grid; grid-template-columns: .78fr 1.22fr; gap: clamp(50px,7vw,100px); align-items: center; position: relative; z-index: 1; }
@@ -249,8 +227,6 @@ svg { display: block; }
 .join-copy .overline { color: var(--mustard); }
 .join-copy h2 { font-size: clamp(30px, 11cqi, 56px); }
 .join-copy > p { max-width: 540px; margin: 26px 0; color: var(--paper-soft); font-size: 16px; line-height: 1.55; }
-.join-link { display: inline-flex; gap: 8px; padding-bottom: 4px; border-bottom: 3px solid var(--mustard); color: var(--paper); font-size: 13px; font-weight: 800; }
-.join-link span { color: var(--mustard); }
 .join-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin-top: 30px; }
 .join-actions .primary-button { background: var(--mustard); color: var(--ink); }
 .join-actions .primary-button span { color: var(--cobalt); }
@@ -309,7 +285,7 @@ svg { display: block; }
 }
 @media (max-width: 560px) {
   .nav-shell, .hero, .section-shell { width: min(100% - 30px,1240px); }
-  .telegram-link { padding: 7px 12px 7px 8px; font-size: 13px; }
+  .nav-cta { padding: 7px 12px 7px 8px; font-size: 13px; }
   .hero { min-height: auto; padding: 44px 0 70px; gap: 64px; }
   .hero h1 { font-size: clamp(40px, 18cqi, 84px); }
   .eyebrow { gap: 10px; padding: 12px; margin-bottom: 28px; }
@@ -323,11 +299,6 @@ svg { display: block; }
   .hero-proof span { font-size: 8px; }
   .hero-poster { box-shadow: 8px 8px 0 var(--ink); }
   .poster-tag { left: -6px; top: 12px; font-size: 8px; }
-  .stage-qr { right: -8px; bottom: -24px; width: 124px; }
-  .qr-front .stage-video { transform: translate(34px, 52px) rotate(5deg) scale(.4); }
-  .qr-front .stage-qr { transform: translate(-108%, -98%) rotate(-1.5deg) scale(2.4); }
-  .qr-sticker { padding: 8px; }
-  .qr-caption { font-size: 7px; letter-spacing: .06em; }
   .widget-kicker { text-align: left; }
   .fixture-stage { min-height: 500px; padding: 18px; }
   .fixture-user-bubble { max-width: 92%; }

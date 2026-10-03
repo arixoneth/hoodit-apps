@@ -1,40 +1,8 @@
-"use client";
-
 import Image from "next/image";
-import { useState } from "react";
 import { ExecutionFixture } from "./execution-fixture";
 import { ChartScene, MoneyScene } from "./illustrations";
 
-const qrPattern = [
-  "111111101011101111111",
-  "100000101010101000001",
-  "101110101110101011101",
-  "101110100101101011101",
-  "101110101011101011101",
-  "100000100101001000001",
-  "111111101010101111111",
-  "000000001101100000000",
-  "101111111001011101101",
-  "011001001111100010110",
-  "110101111010111110011",
-  "001110001101000101100",
-  "101011111011111011101",
-  "000000001100100010010",
-  "111111101011101110111",
-  "100000101100100010101",
-  "101110101011111110111",
-  "101110100110100010100",
-  "101110101101101111111",
-  "100000101010000100100",
-  "111111101101111111101",
-];
-
 export function HooditLanding() {
-  const [qrFront, setQrFront] = useState(false);
-  const toggleStage = () => setQrFront((value) => !value);
-  const stageKey = (event: React.KeyboardEvent) => {
-    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggleStage(); }
-  };
   return (
     <main className="site-shell">
       <div className="hero-zone">
@@ -50,8 +18,8 @@ export function HooditLanding() {
           <a href="#how">How it works</a>
           <a href="#join">Join</a>
         </nav>
-        <a className="telegram-link" href="#hero-qr">
-          <span aria-hidden="true">↗</span> Telegram
+        <a className="nav-cta" href="/app">
+          <span aria-hidden="true">↗</span> Open app
         </a>
       </header>
 
@@ -64,7 +32,7 @@ export function HooditLanding() {
             reviewable on-chain trades. No command syntax. Just text Hoodit.
           </p>
           <div className="hero-actions">
-            <button className="primary-button" type="button" aria-pressed={qrFront} onClick={() => setQrFront(true)}>Scan to enter <span>↗</span></button>
+            <a className="primary-button" href="/app">Open the app <span>↗</span></a>
             <a className="text-link" href="#demo">Try it first <span>↓</span></a>
           </div>
           <div className="hero-proof">
@@ -74,37 +42,23 @@ export function HooditLanding() {
           </div>
         </div>
 
-        <div className="hero-poster-wrap" id="hero-qr">
-          <div className={`hero-stage${qrFront ? " qr-front" : ""}`}>
-            <div className="stage-item stage-video" role="button" tabIndex={0} aria-label={qrFront ? "Bring the bot back to the front" : "Show the QR code"} onClick={toggleStage} onKeyDown={stageKey}>
-              <div className="hero-poster plate">
-                <video className="poster-cat" src="/hero-cat.mp4" poster="/hero-cat.jpg" autoPlay muted loop playsInline aria-label="Hoodit, a cat wearing a hood" />
-                <span className="poster-tag">HOODIT IN THE HOOD</span>
-              </div>
-            </div>
-            <div className="stage-item stage-qr" role="button" tabIndex={0} aria-label={qrFront ? "Bring the bot back to the front" : "Show the QR code"} onClick={toggleStage} onKeyDown={stageKey}>
-              <div className="qr-sticker">
-                <div className="qr-code is-soon" role="img" aria-label="Hoodit Telegram bot, coming soon">
-                  {qrPattern.join("").split("").map((cell, index) => <i key={index} className={cell === "1" ? "filled" : ""} />)}
-                  <span><Image src="/hoodit-logo.jpg" alt="" width={512} height={512} /></span>
-                  <b className="qr-soon">COMING SOON</b>
-                </div>
-                <div className="qr-caption"><span>SOON ON</span><b>TELEGRAM</b></div>
-              </div>
-            </div>
+        <div className="hero-poster-wrap">
+          <div className="hero-poster plate">
+            <video className="poster-cat" src="/hero-cat.mp4" poster="/hero-cat.jpg" autoPlay muted loop playsInline aria-label="Hoodit, a cat wearing a hood" />
+            <span className="poster-tag">HOODIT IN THE HOOD</span>
           </div>
-          <div className="hero-qr-note"><i /> PRIVATE ACCESS · INSTANT SETUP</div>
+          <div className="hero-note"><i /> TELEGRAM BOT · COMING SOON</div>
         </div>
       </section>
 
       <div className="tape-x" aria-hidden="true">
         <div className="tape tape-a"><div>TALK IT <span>✦</span> TRADE IT <span>✦</span> NO COMMAND SYNTAX <span>✦</span> BUILT FOR ROBINHOOD CHAIN <span>✦</span> TALK IT <span>✦</span> TRADE IT <span>✦</span> NO COMMAND SYNTAX <span>✦</span> BUILT FOR ROBINHOOD CHAIN <span>✦</span></div></div>
-        <div className="tape tape-b"><div>SCAN <span>✦</span> FUND <span>✦</span> TALK <span>✦</span> CONFIRM <span>✦</span> THE BOT IN THE HOOD <span>✦</span> SCAN <span>✦</span> FUND <span>✦</span> TALK <span>✦</span> CONFIRM <span>✦</span> THE BOT IN THE HOOD <span>✦</span></div></div>
+        <div className="tape tape-b"><div>CONNECT <span>✦</span> FUND <span>✦</span> TALK <span>✦</span> CONFIRM <span>✦</span> THE BOT IN THE HOOD <span>✦</span> CONNECT <span>✦</span> FUND <span>✦</span> TALK <span>✦</span> CONFIRM <span>✦</span> THE BOT IN THE HOOD <span>✦</span></div></div>
       </div>
 
       <section className="widget-demo-section section-shell" id="demo">
         <div className="widget-demo-copy">
-          <h2>Try the bot before you scan.</h2>
+          <h2>Watch the bot work.</h2>
           <p>Same agent. Same transaction flow. Right here on the web.</p>
           <div className="demo-scene-frame">
             <video className="demo-scene" src="/demo-cat.mp4" poster="/demo-cat.jpg" autoPlay muted loop playsInline aria-label="Hoodit in a ninja stance" />
@@ -152,9 +106,9 @@ export function HooditLanding() {
 
       <section className="features section-shell plate" id="features">
         <div className="feature-intro">
-          <p className="overline">IN TELEGRAM · ON THE WEB</p>
+          <p className="overline">ON THE WEB · TELEGRAM SOON</p>
           <h2>One chat.<br />A whole desk.</h2>
-          <p>Access the same Hoodit intelligence wherever you trade—inside Telegram or through the Aomi widget.</p>
+          <p>Use Hoodit on the web today. The same intelligence is coming to Telegram.</p>
         </div>
         <div className="feature-grid">
           <article className="feature-card feature-salmon">
@@ -192,7 +146,7 @@ export function HooditLanding() {
         <div className="flow-steps">
           <article>
             <b className="flow-number">1</b>
-            <div className="flow-copy"><h3>Scan</h3><p>Open Hoodit from the QR code and connect your Telegram identity.</p><small className="flow-note">SESSION CREATED IN SECONDS</small></div>
+            <div className="flow-copy"><h3>Connect</h3><p>Open Hoodit on the web and connect a wallet, or start as a guest.</p><small className="flow-note">SESSION CREATED IN SECONDS</small></div>
             <div className="flow-visual scan-visual" aria-hidden="true"><i className="scan-ring scan-ring-outer" /><i className="scan-ring scan-ring-inner" /><Image className="scan-mark" src="/hoodit-logo.jpg" alt="" width={512} height={512} /><small className="scan-status">LINKED</small></div>
           </article>
           <article>
@@ -213,17 +167,16 @@ export function HooditLanding() {
           <div className="join-copy">
             <p className="overline">EARLY ACCESS</p>
             <h2>Your next trade starts with a text.</h2>
-            <p>Open Hoodit in Telegram. Your account, intelligence, and trading flow move with you.</p>
+            <p>Open Hoodit on the web. Telegram is next, with the same account and trading flow.</p>
             <div className="join-actions">
-              <a className="primary-button" href="#hero-qr">Open in Telegram <span>↗</span></a>
-              <a className="join-link" href="/app">Or try the web app <span>↗</span></a>
+              <a className="primary-button" href="/app">Open the app <span>↗</span></a>
             </div>
           </div>
           <div className="cta-poster">
             <Image className="cta-cat" src="/cta-cat.jpg" alt="Hoodit holding a sword, ready to trade" width={1000} height={1000} />
             <div className="closer-details">
-              <div className="closer-row closer-account"><span><i /> @HOODIT_AI</span><b>ONLINE</b></div>
-              <div className="closer-row"><span>IDENTITY</span><b>TELEGRAM</b></div>
+              <div className="closer-row closer-account"><span><i /> WEB APP</span><b>LIVE</b></div>
+              <div className="closer-row"><span>TELEGRAM</span><b>COMING SOON</b></div>
               <div className="closer-row"><span>SETTLEMENT</span><b>ROBINHOOD CHAIN</b></div>
               <div className="closer-row"><span>FINAL SAY</span><b>ALWAYS YOURS</b></div>
             </div>
