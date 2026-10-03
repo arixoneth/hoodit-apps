@@ -1,464 +1,630 @@
-//! Provider-neutral pool snapshots, launchpad lifecycle, and setup flags.
-
-use crate::model::{self, one, opt, sig, usd};
+//! Shared market logic: Codex field sets, pair-token labels, the trade
+//! support table, Pons curve progress, holder labels and the token rows and
+//! card every tool reuses.
+use crate::app::{Call, Runtime};
+use crate::providers::{self, NATIVE, PonsLaunch};
+use crate::shape::{change_pct, field, int, label, min_ago, num, pct, price, put_span, sig, usd};
 use serde_json::{Value, json};
 
-pub mod chart;
-pub mod swaps;
+/// Fields read from `filterTokens` results for rows and cards.
+pub const RESULT_FIELDS: &str = "createdAt priceUSD marketCap circulatingMarketCap liquidity volume24 \
+change1 change4 change24 buyVolume1 sellVolume1 uniqueBuys1 uniqueSells1 buyVolume24 sellVolume24 \
+uniqueBuys24 uniqueSells24 holders top10HoldersPercent devHeldPercentage sniperHeldPercentage \
+bundlerHeldPercentage insiderHeldPercentage athPrice lastTransaction \
+pair { address token0 token1 token0Data { symbol decimals } token1Data { symbol decimals } } \
+token { address symbol name createdAt creatorAddress info { totalSupply } \
+launchpad { launchpadName graduationPercent completed migrated } }";
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Win<T> {
-    pub m5: Option<T>,
-    pub h1: Option<T>,
-    pub h6: Option<T>,
-    pub h24: Option<T>,
-}
-impl<T: Copy> Win<T> {
-    pub fn from(read: impl Fn(&str) -> Option<T>) -> Self {
-        Self {
-            m5: read("m5"),
-            h1: read("h1"),
-            h6: read("h6"),
-            h24: read("h24"),
-        }
-    }
-}
+pub const WETH: &str = "0x0bd7d308f8e1639fab988df18a8011f41eacad73";
 
-/// One pool as a market snapshot. `token` is the pool's base side.
-#[derive(Clone, Debug, Default)]
-pub struct Snapshot {
-    pub pool_id: String,
-    pub venue: String,
-    /// Swap-log layout: v2, v3, v4 or curve.
-    pub kind: Option<&'static str>,
-    pub token: String,
-    pub symbol: String,
-    pub name: String,
-    pub quote: String,
-    pub quote_symbol: String,
-    pub price_usd: Option<f64>,
-    pub quote_usd: Option<f64>,
-    pub liquidity_usd: Option<f64>,
-    pub fdv_usd: Option<f64>,
-    pub mcap_usd: Option<f64>,
-    pub created: Option<i64>,
-    pub change: Win<f64>,
-    pub volume: Win<f64>,
-    pub buys: Win<u64>,
-    pub sells: Win<u64>,
-    /// The project claimed a DexScreener profile (image, website or socials).
-    /// Copycats rarely have one.
-    pub profile: bool,
-}
+/// Pair tokens Pons and other launchpads use on Robinhood Chain.
+const PAIRS: &[(&str, &str, &str, u8)] = &[
+    (NATIVE, "ETH", "eth", 18),
+    (WETH, "WETH", "eth", 18),
+    (
+        "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+        "USDG",
+        "usd",
+        6,
+    ),
+    (
+        "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+        "NVDA",
+        "stock",
+        18,
+    ),
+    (
+        "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+        "SPCX",
+        "stock",
+        18,
+    ),
+    (
+        "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+        "GLD",
+        "stock",
+        18,
+    ),
+    (
+        "0x1d11f0496982706c5e14a514d4e79f2e6bde4516",
+        "DJT",
+        "stock",
+        18,
+    ),
+    (
+        "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+        "SPY",
+        "stock",
+        18,
+    ),
+    (
+        "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+        "TSLA",
+        "stock",
+        18,
+    ),
+    (
+        "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+        "GME",
+        "stock",
+        18,
+    ),
+    (
+        "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+        "GOOGL",
+        "stock",
+        18,
+    ),
+    (
+        "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+        "QQQ",
+        "stock",
+        18,
+    ),
+];
 
-impl Snapshot {
-    pub fn age_hours(&self, now: i64) -> Option<f64> {
-        self.created
-            .map(|created| (now - created).max(0) as f64 / 3600.0)
-    }
-    pub fn txns_24h(&self) -> Option<u64> {
-        Some(self.buys.h24? + self.sells.h24?)
-    }
-    /// Deep liquidity nobody trades against: a copycat's parked or fake depth.
-    pub fn parked_liquidity(&self) -> bool {
-        let liquidity = self.liquidity_usd.unwrap_or(0.0);
-        liquidity >= 20_000.0 && self.volume.h24.unwrap_or(0.0) < liquidity * 0.01
-    }
-    pub fn pair(&self) -> String {
-        format!("{}/{}", self.symbol, self.quote_symbol)
-    }
-    pub fn view(&self, now: i64) -> Value {
-        let mcap = self.mcap_usd.filter(|mcap| {
-            self.fdv_usd
-                .is_none_or(|fdv| (fdv - mcap).abs() > fdv * 0.01)
-        });
-        let pair = |w: &Win<u64>, s: &Win<u64>| json!({"h1":[w.h1,s.h1],"h6":[w.h6,s.h6],"h24":[w.h24,s.h24]});
-        json!({
-            "pool_id": self.pool_id,
-            "venue": self.venue,
-            "pair": self.pair(),
-            "price_usd": opt(self.price_usd, sig),
-            "liquidity_usd": opt(self.liquidity_usd, usd),
-            "fdv_usd": opt(self.fdv_usd, usd),
-            "mcap_usd": opt(mcap, usd),
-            "age_h": opt(self.age_hours(now), one),
-            "change_pct": {"m5":opt(self.change.m5,one),"h1":opt(self.change.h1,one),"h6":opt(self.change.h6,one),"h24":opt(self.change.h24,one)},
-            "volume_usd": {"h1":opt(self.volume.h1,usd),"h6":opt(self.volume.h6,usd),"h24":opt(self.volume.h24,usd)},
-            "buys_sells": pair(&self.buys, &self.sells),
-        })
-    }
-}
+/// Contracts that hold supply without being a trader.
+const KNOWN_HOLDERS: &[(&str, &str)] = &[
+    (
+        "0x8366a39cc670b4001a1121b8f6a443a643e40951",
+        "uniswap v4 pool",
+    ),
+    ("0x267444d099b10fb5ed7c3cc7b7c767adca574952", "pons locker"),
+    ("0xe5e702641ea86f4ae6cc3cdaed2b886f976be044", "pons hook"),
+    (
+        "0xd3afeb2a57f70ef218aa82451c51b2fb0416ac9e",
+        "pons fee escrow",
+    ),
+    ("0x000000000000000000000000000000000000dead", "burn"),
+    (NATIVE, "burn"),
+];
 
-/// Factual setup flags with the numbers behind them. They describe risk and
-/// momentum; the skill explains how to weigh them.
-pub fn flags(s: &Snapshot, now: i64) -> Vec<String> {
-    let mut flags = vec![];
-    let ratio = |a: Option<f64>, b: Option<f64>| match (a, b) {
-        (Some(a), Some(b)) if b > 0.0 => Some(a / b),
-        _ => None,
-    };
-    if let Some(age) = s.age_hours(now).filter(|age| *age < 6.0) {
-        flags.push(format!("fresh: pool is {age:.1}h old"));
-    }
-    if let Some(liquidity) = s.liquidity_usd.filter(|l| *l < 10_000.0) {
-        flags.push(format!("micro_liquidity: ${liquidity:.0}"));
-    }
-    let (h1, h6, h24) = (s.change.h1, s.change.h6, s.change.h24);
-    if h24.is_some_and(|c| c >= 300.0) || h6.is_some_and(|c| c >= 150.0) {
-        flags.push(format!(
-            "extended: {:+.0}% 6h, {:+.0}% 24h",
-            h6.unwrap_or(0.0),
-            h24.unwrap_or(0.0)
-        ));
-    }
-    if (h24.is_some_and(|c| c >= 100.0) || h6.is_some_and(|c| c >= 50.0))
-        && h1.is_some_and(|c| c <= -10.0)
-    {
-        flags.push(format!(
-            "fading: {:+.0}% last hour after the run",
-            h1.unwrap_or(0.0)
-        ));
-    }
-    if h24.is_some_and(|c| c <= -50.0) {
-        flags.push(format!("dumping: {:+.0}% 24h", h24.unwrap_or(0.0)));
-    }
-    if let Some(turnover) = ratio(s.volume.h24, s.liquidity_usd).filter(|t| *t >= 20.0) {
-        flags.push(format!("churn: 24h volume is {turnover:.0}x liquidity"));
-    }
-    if s.parked_liquidity() {
-        flags.push(format!(
-            "parked_liquidity: ${:.0} liquidity but ${:.0} traded in 24h",
-            s.liquidity_usd.unwrap_or(0.0),
-            s.volume.h24.unwrap_or(0.0)
-        ));
-    }
-    if let Some(depth) = ratio(s.fdv_usd, s.liquidity_usd).filter(|d| *d >= 50.0) {
-        flags.push(format!("thin_exit: fdv is {depth:.0}x liquidity"));
-    }
-    if let (Some(buys), Some(sells)) = (s.buys.h1, s.sells.h1)
-        && buys + sells >= 30
-    {
-        let share = buys as f64 / (buys + sells) as f64;
-        if share <= 0.4 {
-            flags.push(format!(
-                "sellers_in_control: {buys} buys vs {sells} sells last hour"
-            ));
-        } else if share >= 0.65 {
-            flags.push(format!(
-                "buyers_in_control: {buys} buys vs {sells} sells last hour"
-            ));
-        }
-    }
-    let slippage = Slippage::of(s, false);
-    if slippage.needed_bps > SUGGESTED_MAX_BPS {
-        flags.push(format!(
-            "jumpy: needs ~{:.0}% slippage to fill through chat ({})",
-            f64::from(slippage.needed_bps) / 100.0,
-            slippage.basis
-        ));
-    }
-    if s.txns_24h().is_some_and(|n| n < 20) {
-        flags.push(format!(
-            "quiet: {} trades in 24h",
-            s.txns_24h().unwrap_or(0)
-        ));
-    }
-    flags
-}
-
-/// Slippage Hoodit suggests without asking. Above it, only the user's explicit
-/// choice; above `MAX_SLIPPAGE_BPS`, no trade through chat.
-pub const SUGGESTED_MAX_BPS: u32 = 500;
-pub const MAX_SLIPPAGE_BPS: u32 = 1000;
-
-/// A slippage tolerance sized for chat execution: the price can move between
-/// the simulation and the wallet signature (the reply plus the user's
-/// confirmation, about one to two minutes), so the tolerance covers one
-/// typical 5-minute move, with a floor set by pool depth.
+/// A pair token: symbol, kind (eth, usd, stock, other) and decimals.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Slippage {
-    pub needed_bps: u32,
-    pub basis: String,
-    /// Parked liquidity is not depth a fill can rely on.
-    pub parked: bool,
+pub struct Pair {
+    pub symbol: String,
+    pub kind: &'static str,
+    pub decimals: u8,
 }
 
-impl Slippage {
-    pub fn of(s: &Snapshot, curve: bool) -> Self {
-        let liquidity = s.liquidity_usd.unwrap_or(0.0);
-        let parked = s.parked_liquidity();
-        let floor: u32 = match liquidity {
-            _ if curve || parked => 300,
-            l if l >= 250_000.0 => 50,
-            l if l >= 50_000.0 => 100,
-            l if l >= 10_000.0 => 200,
-            _ => 300,
-        };
-        let m5 = s.change.m5.map(f64::abs).unwrap_or(0.0);
-        let h1 = s.change.h1.map(|c| c.abs() / 12f64.sqrt()).unwrap_or(0.0);
-        let move_pct = m5.max(h1);
-        // Round up to 25 bps steps so small noise doesn't change the number.
-        let drift = ((move_pct * 100.0 / 25.0).ceil() * 25.0).min(f64::from(u32::MAX)) as u32;
-        let depth = if curve {
-            "pons curve".to_string()
-        } else if parked {
-            format!("parked liquidity ${liquidity:.0} that nobody trades")
-        } else {
-            format!("liquidity ${liquidity:.0}")
-        };
-        Self {
-            needed_bps: floor.max(drift),
-            basis: format!("typical 5m move {move_pct:.1}%, {depth}"),
-            parked,
-        }
-    }
-    pub fn suggested_bps(&self) -> u32 {
-        self.needed_bps.min(SUGGESTED_MAX_BPS)
-    }
-    pub fn tradeable(&self) -> &'static str {
-        match self.needed_bps {
-            _ if self.parked => "unproven_depth",
-            n if n <= SUGGESTED_MAX_BPS => "yes",
-            n if n <= MAX_SLIPPAGE_BPS => "only_with_explicit_ok",
-            _ => "too_volatile",
-        }
-    }
-    pub fn view(&self) -> Value {
-        json!({
-            "suggested_bps": self.suggested_bps(),
-            "needed_bps": self.needed_bps,
-            "tradeable": self.tradeable(),
-            "basis": self.basis,
+pub fn known_pair(address: &str) -> Option<Pair> {
+    let address = address.to_ascii_lowercase();
+    PAIRS
+        .iter()
+        .find(|(a, ..)| *a == address)
+        .map(|(_, symbol, kind, decimals)| Pair {
+            symbol: symbol.to_string(),
+            kind,
+            decimals: *decimals,
         })
+}
+
+/// Any pair token; unknown ones are read from chain and count as `other`.
+pub async fn pair_of(rt: &Runtime, address: &str) -> Option<Pair> {
+    if let Some(pair) = known_pair(address) {
+        return Some(pair);
+    }
+    let (decimals, symbol) = tokio::join!(
+        providers::decimals(rt, address),
+        providers::symbol(rt, address)
+    );
+    Some(Pair {
+        symbol: symbol.unwrap_or_else(|| "?".into()),
+        kind: "other",
+        decimals: decimals?,
+    })
+}
+
+/// The non-target side of the token's main Codex pair.
+fn pair_from_result(result: &Value, token: &str) -> Option<Pair> {
+    let pair = result.get("pair")?;
+    let t0 = pair.get("token0")?.as_str()?.to_ascii_lowercase();
+    let (address, data) = if t0 == token {
+        (
+            pair.get("token1")?.as_str()?.to_ascii_lowercase(),
+            pair.get("token1Data"),
+        )
+    } else {
+        (t0, pair.get("token0Data"))
+    };
+    known_pair(&address).or_else(|| {
+        let data = data?;
+        Some(Pair {
+            symbol: label(data.get("symbol"), 12).as_str()?.to_string(),
+            kind: "other",
+            decimals: data.get("decimals").and_then(num).unwrap_or(18.0) as u8,
+        })
+    })
+}
+
+/// Can LI.FI (the host's swap router) trade this token now? From live
+/// quotes on 2026-10-03; re-checked by the eval harness.
+pub fn trade_support(launchpad: Option<&str>, on_curve: bool, pair_kind: &str) -> &'static str {
+    let pad = launchpad.unwrap_or("").to_ascii_lowercase();
+    if !on_curve {
+        return match pad.as_str() {
+            "launchfair" | "noxa fun" => "research_only",
+            _ => "full",
+        };
+    }
+    match pad.as_str() {
+        "pons" if matches!(pair_kind, "eth" | "usd") => "full",
+        "pons" => "research_only",
+        "virtuals" | "bow.fun" | "bankr" | "long" | "uniswapcca" | "sushi launch" | "feel.cash"
+        | "clanker v4" => "full",
+        "flap" | "hood.fun" | "bags" | "trench" => "after_graduation",
+        _ => "research_only",
     }
 }
 
-/// Launchpad stage from GeckoTerminal's launchpad record.
-#[derive(Clone, Debug, Default)]
-pub struct Lifecycle {
-    pub stage: &'static str,
-    pub progress_pct: Option<f64>,
-    pub graduated_at: Option<String>,
-    pub destination_pool: Option<String>,
-    pub curve_pool: Option<String>,
+/// Pons curve progress the way Pons shows it: real pair-token reserve over
+/// the launch's graduation target.
+pub async fn pons_curve(rt: &Runtime, launch: &PonsLaunch) -> Value {
+    let (pair, reserve) = tokio::join!(
+        pair_of(rt, &launch.pair_token),
+        providers::pons_reserve(rt, &launch.curve)
+    );
+    let Some(pair) = pair else {
+        return json!({ "pair": "unknown" });
+    };
+    let scale = 10f64.powi(pair.decimals as i32);
+    let raised = reserve.map(|r| r as f64 / scale);
+    let target = launch.target as f64 / scale;
+    json!({
+        "pct": pct(raised.filter(|_| target > 0.0).map(|r| r / target * 100.0)),
+        "raised": raised.map(|r| sig(r, 4)),
+        "target": sig(target, 4),
+        "pair": pair.symbol,
+        "raised_usd": if pair.kind == "usd" { usd(raised) } else { Value::Null },
+    })
 }
-impl Lifecycle {
-    pub fn unknown() -> Self {
+
+/// What a `filterTokens` result says about the launch, before any chain read.
+pub struct Basics {
+    pub token: String,
+    pub launchpad: Option<String>,
+    pub on_curve: bool,
+    pub graduated: bool,
+    pub pair: Option<Pair>,
+}
+
+impl Basics {
+    pub fn of(result: &Value) -> Self {
+        let token = result
+            .pointer("/token/address")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let launch = result.pointer("/token/launchpad");
+        let flag = |k: &str| {
+            launch
+                .and_then(|l| l.get(k))
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        };
+        let launchpad = launch
+            .and_then(|l| l.get("launchpadName"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let graduated = flag("completed") || flag("migrated");
+        let on_curve = launchpad.is_some()
+            && !graduated
+            && launch.is_some_and(|l| l.get("graduationPercent").is_some_and(|g| !g.is_null()));
+        let pair = pair_from_result(result, &token);
         Self {
-            stage: "unknown",
-            ..Default::default()
+            token,
+            launchpad,
+            on_curve,
+            graduated,
+            pair,
         }
     }
-    pub fn view(&self) -> Value {
-        let mut view = json!({"stage": self.stage});
-        let object = view.as_object_mut().expect("object");
-        if let Some(pct) = self.progress_pct {
-            object.insert("curve_progress_pct".into(), one(pct));
+
+    pub fn is_pons(&self) -> bool {
+        self.launchpad.as_deref() == Some("pons")
+    }
+
+    pub fn stage(&self) -> &'static str {
+        match (&self.launchpad, self.on_curve, self.graduated) {
+            (Some(_), true, _) => "curve",
+            (Some(_), _, true) => "graduated",
+            _ => "pool",
         }
-        for (key, value) in [
-            ("graduated_at", &self.graduated_at),
-            ("destination_pool_id", &self.destination_pool),
-            ("curve_pool_id", &self.curve_pool),
-        ] {
-            if let Some(value) = value {
-                object.insert(key.into(), json!(value));
+    }
+
+    pub fn pair_kind(&self) -> &'static str {
+        self.pair.as_ref().map(|p| p.kind).unwrap_or("other")
+    }
+}
+
+/// Compact scan row, about 400 chars.
+pub fn row(result: &Value) -> Value {
+    let b = Basics::of(result);
+    let f = |k: &str| field(result, &[k]);
+    let mut out = json!({
+        "symbol": label(result.pointer("/token/symbol"), 20),
+        "token": b.token,
+        "launchpad": b.launchpad,
+        "stage": b.stage(),
+        "pair": b.pair.as_ref().map(|p| p.symbol.clone()),
+        "trade_support": trade_support(b.launchpad.as_deref(), b.on_curve, b.pair_kind()),
+    });
+    put_span(
+        &mut out,
+        "age",
+        field(result, &["token", "createdAt"]).or(f("createdAt")),
+    );
+    let rest = json!({
+        "price_usd": price(f("priceUSD")),
+        "fdv_usd": usd(f("marketCap")),
+        "liquidity_usd": usd(f("liquidity")),
+        "volume_24h_usd": usd(f("volume24")),
+        "change_1h_pct": change_pct(f("change1")),
+        "change_24h_pct": change_pct(f("change24")),
+        "buy_1h_usd": usd(f("buyVolume1")),
+        "sell_1h_usd": usd(f("sellVolume1")),
+        "holders": int(f("holders")),
+        "top10_pct": pct(f("top10HoldersPercent")),
+        "dev_pct": pct(f("devHeldPercentage")),
+        "snipers_pct": pct(f("sniperHeldPercentage")),
+    });
+    merge(&mut out, rest);
+    if b.on_curve && !b.is_pons() {
+        out["graduation_pct"] = pct(field(result, &["token", "launchpad", "graduationPercent"]));
+    }
+    out
+}
+
+/// The full card for one token, before chain enrichment.
+pub fn card(result: &Value) -> Value {
+    let b = Basics::of(result);
+    let f = |k: &str| field(result, &[k]);
+    let mut out = json!({
+        "symbol": label(result.pointer("/token/symbol"), 20),
+        "name": label(result.pointer("/token/name"), 40),
+        "token": b.token,
+        "launchpad": b.launchpad,
+        "stage": b.stage(),
+        "pair": b.pair.as_ref().map(|p| p.symbol.clone()),
+        "pair_kind": b.pair_kind(),
+        "trade_support": trade_support(b.launchpad.as_deref(), b.on_curve, b.pair_kind()),
+    });
+    put_span(
+        &mut out,
+        "age",
+        field(result, &["token", "createdAt"]).or(f("createdAt")),
+    );
+    let flow = |w: &str| {
+        json!({
+            "buy_usd": usd(f(&format!("buyVolume{w}"))),
+            "sell_usd": usd(f(&format!("sellVolume{w}"))),
+            "buyers": int(f(&format!("uniqueBuys{w}"))),
+            "sellers": int(f(&format!("uniqueSells{w}"))),
+        })
+    };
+    let (ath, last) = (f("athPrice"), f("priceUSD"));
+    let rest = json!({
+        "price_usd": price(last),
+        "fdv_usd": usd(f("marketCap")),
+        "mcap_usd": usd(f("circulatingMarketCap")),
+        "liquidity_usd": usd(f("liquidity")),
+        "volume_24h_usd": usd(f("volume24")),
+        "change_pct": {
+            "h1": change_pct(f("change1")), "h4": change_pct(f("change4")), "h24": change_pct(f("change24")),
+        },
+        "flow_1h": flow("1"),
+        "flow_24h": flow("24"),
+        "holders": int(f("holders")),
+        "held_pct": {
+            "top10": pct(f("top10HoldersPercent")), "dev": pct(f("devHeldPercentage")),
+            "snipers": pct(f("sniperHeldPercentage")), "bundlers": pct(f("bundlerHeldPercentage")),
+            "insiders": pct(f("insiderHeldPercentage")),
+        },
+        "ath_usd": price(ath),
+        "from_ath_pct": match (ath, last) {
+            (Some(a), Some(l)) if a > 0.0 => pct(Some((l / a - 1.0) * 100.0)),
+            _ => Value::Null,
+        },
+        "last_trade_min_ago": min_ago(f("lastTransaction")),
+        "explorer_url": format!("https://robin.etherscan.io/token/{}", b.token),
+    });
+    merge(&mut out, rest);
+    if b.on_curve && !b.is_pons() {
+        out["graduation_pct"] = pct(field(result, &["token", "launchpad", "graduationPercent"]));
+    }
+    out
+}
+
+fn merge(out: &mut Value, rest: Value) {
+    if let (Some(out), Value::Object(rest)) = (out.as_object_mut(), rest) {
+        out.extend(rest);
+    }
+}
+
+/// Applies the Pons launch record to a row or card: true stage, curve
+/// progress, trade support and the dev wallet. `full` adds the card fields.
+pub async fn apply_pons(rt: &Runtime, out: &mut Value, launch: &PonsLaunch, full: bool) {
+    out["stage"] = json!(launch.stage());
+    let pair = pair_of(rt, &launch.pair_token).await;
+    let kind = pair.as_ref().map(|p| p.kind).unwrap_or("other");
+    if let Some(pair) = &pair {
+        out["pair"] = json!(pair.symbol);
+        if full {
+            out["pair_kind"] = json!(pair.kind);
+        }
+    }
+    out["trade_support"] = json!(trade_support(Some("pons"), launch.on_curve(), kind));
+    if launch.on_curve() {
+        let curve = pons_curve(rt, launch).await;
+        if full {
+            out["curve"] = curve;
+        } else {
+            out["curve_pct"] = curve["pct"].clone();
+        }
+    }
+    if full {
+        out["creator_tax_pct"] = pct(Some(launch.creator_tax_bps as f64 / 100.0));
+    }
+}
+
+/// Who launched a token. For Pons the launch record's deployer is the dev
+/// unless it is a contract (a fee splitter); then the launch tx sender,
+/// which Codex records as `creatorAddress`, is.
+pub async fn dev_wallet(
+    rt: &Runtime,
+    launch: Option<&PonsLaunch>,
+    codex_creator: Option<&str>,
+) -> Option<(String, &'static str)> {
+    let creator = codex_creator.map(str::to_ascii_lowercase);
+    match launch {
+        Some(l) => {
+            let contract = providers::has_code(rt, std::slice::from_ref(&l.deployer)).await;
+            if contract.first() == Some(&Some(true)) {
+                creator.map(|c| (c, "launch tx sender (Pons deployer field is a contract)"))
+            } else {
+                Some((l.deployer.clone(), "Pons launch record"))
             }
         }
-        view
+        None => creator.map(|c| (c, "launch tx sender")),
     }
 }
 
-/// Picks the pool that best represents a token: most 24h volume among pools
-/// where it is the base token, then liquidity. Pools without a trade in 24h
-/// and near-empty pools are skipped, so a dormant pre-created pool (Pons makes
-/// one per curve) never hides a live curve.
-pub fn main_pool<'a>(pools: &'a [Snapshot], token: &str) -> Option<&'a Snapshot> {
-    let score = |s: &Snapshot| s.volume.h24.unwrap_or(0.0) + 0.1 * s.liquidity_usd.unwrap_or(0.0);
-    pools
-        .iter()
-        .filter(|s| s.token == token && s.kind.is_some())
-        .filter(|s| {
-            s.liquidity_usd.unwrap_or(0.0) >= 500.0 || s.volume.h24.unwrap_or(0.0) >= 5000.0
-        })
-        .filter(|s| {
-            s.txns_24h()
-                .map_or(s.liquidity_usd.unwrap_or(0.0) >= 1000.0, |n| n > 0)
-        })
-        .max_by(|a, b| score(a).total_cmp(&score(b)))
+/// Labels for holder addresses: known contracts, the token's own curve
+/// and pool, and the dev.
+pub struct HolderLabels {
+    known: Vec<(String, &'static str)>,
 }
 
-/// The deepest pool of the token, active or not: what a dead coin is judged on.
-pub fn deepest_pool<'a>(pools: &'a [Snapshot], token: &str) -> Option<&'a Snapshot> {
-    pools
-        .iter()
-        .filter(|s| s.token == token && s.kind.is_some())
-        .max_by(|a, b| {
-            a.liquidity_usd
-                .unwrap_or(0.0)
-                .total_cmp(&b.liquidity_usd.unwrap_or(0.0))
-        })
+impl HolderLabels {
+    pub fn new(launch: Option<&PonsLaunch>, pool: Option<&str>, dev: Option<&str>) -> Self {
+        let mut known: Vec<(String, &'static str)> = KNOWN_HOLDERS
+            .iter()
+            .map(|(a, l)| (a.to_string(), *l))
+            .collect();
+        if let Some(l) = launch {
+            known.push((l.curve.clone(), "pons curve"));
+        }
+        if let Some(p) = pool.filter(|p| p.len() == 42) {
+            known.push((p.to_ascii_lowercase(), "pool"));
+        }
+        if let Some(d) = dev {
+            known.push((d.to_ascii_lowercase(), "dev"));
+        }
+        Self { known }
+    }
+
+    pub fn of(&self, address: &str) -> Option<&'static str> {
+        let address = address.to_ascii_lowercase();
+        self.known
+            .iter()
+            .find(|(a, _)| *a == address)
+            .map(|(_, l)| *l)
+    }
+
+    /// Supply held by a contract, not a trader. The dev is a trader here.
+    pub fn is_contract(&self, address: &str) -> bool {
+        self.of(address).is_some_and(|l| l != "dev")
+    }
 }
 
-pub fn is_base_asset(token: &str) -> bool {
-    [model::WETH, model::USDG, model::NATIVE].contains(&token)
+/// Top-10 share of supply by wallets, excluding the pool, curve, locker
+/// and burn contracts. `holders` are Codex `holders.items`.
+pub fn top10_wallets_pct(holders: &[Value], labels: &HolderLabels, supply: Option<f64>) -> Value {
+    let Some(supply) = supply.filter(|s| *s > 0.0) else {
+        return Value::Null;
+    };
+    let held: f64 = holders
+        .iter()
+        .filter(|h| {
+            h.get("address")
+                .and_then(Value::as_str)
+                .is_some_and(|a| !labels.is_contract(a))
+        })
+        .take(10)
+        .filter_map(|h| h.get("shiftedBalance").and_then(num))
+        .sum();
+    pct(Some(held / supply * 100.0))
+}
+
+/// Fills a card's Pons fields, dev wallet and wallet-only top-10 share.
+pub async fn enrich_card(
+    rt: &Runtime,
+    call: &mut Call,
+    card: &mut Value,
+    result: &Value,
+    holders: &[Value],
+) {
+    let b = Basics::of(result);
+    let launch = if b.is_pons() {
+        let launch = providers::pons_launch(rt, &b.token).await;
+        if launch.is_none() {
+            call.gap("Pons launch record unreadable; curve % and dev unknown");
+        }
+        launch
+    } else {
+        None
+    };
+    if let Some(l) = &launch {
+        apply_pons(rt, card, l, true).await;
+    }
+    let creator = result
+        .pointer("/token/creatorAddress")
+        .and_then(Value::as_str);
+    let dev = dev_wallet(rt, launch.as_ref(), creator).await;
+    if let Some((wallet, _)) = &dev {
+        card["dev"] = json!(wallet);
+    }
+    let pool = result.pointer("/pair/address").and_then(Value::as_str);
+    let labels = HolderLabels::new(launch.as_ref(), pool, None);
+    let supply = field(result, &["token", "info", "totalSupply"]);
+    if !holders.is_empty() {
+        card["held_pct"]["top10"] = top10_wallets_pct(holders, &labels, supply);
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn snapshot() -> Snapshot {
-        Snapshot {
-            pool_id: "0xpool".into(),
-            token: "0xtoken".into(),
-            kind: Some("v3"),
-            symbol: "SC".into(),
-            quote_symbol: "WETH".into(),
-            liquidity_usd: Some(275_000.0),
-            fdv_usd: Some(21_000_000.0),
-            created: Some(0),
-            change: Win {
-                h1: Some(-11.0),
-                h6: Some(40.0),
-                h24: Some(2166.0),
-                ..Default::default()
-            },
-            volume: Win {
-                h24: Some(18_900_000.0),
-                ..Default::default()
-            },
-            buys: Win {
-                h1: Some(400),
-                h24: Some(17_000),
-                ..Default::default()
-            },
-            sells: Win {
-                h1: Some(700),
-                h24: Some(8_500),
-                ..Default::default()
-            },
-            ..Default::default()
+    #[test]
+    fn support_table_matches_routing_tests() {
+        assert_eq!(trade_support(Some("pons"), true, "eth"), "full");
+        assert_eq!(trade_support(Some("pons"), true, "usd"), "full");
+        assert_eq!(trade_support(Some("pons"), true, "stock"), "research_only");
+        assert_eq!(trade_support(Some("pons"), true, "other"), "research_only");
+        assert_eq!(trade_support(Some("Flap"), true, "eth"), "after_graduation");
+        assert_eq!(trade_support(Some("Flap"), false, "eth"), "full");
+        assert_eq!(trade_support(None, false, "eth"), "full");
+        assert_eq!(
+            trade_support(Some("Launchfair"), true, "eth"),
+            "research_only"
+        );
+    }
+
+    #[test]
+    fn pair_labels_known_quote_tokens() {
+        let usdg = known_pair("0x5FC5360D0400A0FD4F2AF552ADD042D716F1D168").unwrap();
+        assert_eq!((usdg.kind, usdg.decimals), ("usd", 6));
+        assert_eq!(known_pair(NATIVE).unwrap().symbol, "ETH");
+        assert!(known_pair("0x1111111111111111111111111111111111111111").is_none());
+    }
+
+    #[test]
+    fn unknown_codex_pair_is_other() {
+        let result = json!({
+            "token": { "address": "0xaa" },
+            "pair": { "token0": "0xAA", "token1": "0xbb", "token1Data": { "symbol": "IBIT", "decimals": 8 } }
+        });
+        let pair = Basics::of(&result).pair.unwrap();
+        assert_eq!(
+            (pair.symbol.as_str(), pair.kind, pair.decimals),
+            ("IBIT", "other", 8)
+        );
+    }
+
+    /// Live `filterTokens` results (trending and bonding boards, 2026-10-03).
+    fn recorded() -> Vec<Value> {
+        let data: Value =
+            serde_json::from_str(include_str!("fixtures/filter-tokens.json")).unwrap();
+        ["s", "b"]
+            .iter()
+            .flat_map(|k| data["data"][*k]["results"].as_array().unwrap().clone())
+            .collect()
+    }
+
+    #[test]
+    fn five_widest_scan_rows_fit_one_reply() {
+        let mut rows: Vec<Value> = recorded()
+            .iter()
+            .map(|r| {
+                let mut row = crate::shape::compact(row(r));
+                row["curve_pct"] = json!(85.4);
+                row["symbol"] = json!("X".repeat(20));
+                row
+            })
+            .collect();
+        rows.sort_by_key(|r| std::cmp::Reverse(crate::shape::size(r)));
+        rows.truncate(5);
+        let reply = crate::shape::ok(
+            json!({ "board": "bonding curves, closest to graduating", "scanned": 10, "returned": 5, "rows": rows }),
+            &["2 Pons launch records unreadable; their curve % is unknown".into()],
+        );
+        let reply = crate::shape::compact(reply);
+        assert!(
+            crate::shape::size(&reply) <= crate::shape::MAX_REPLY,
+            "{}",
+            crate::shape::size(&reply)
+        );
+    }
+
+    #[test]
+    fn widest_card_fits_one_reply() {
+        for r in recorded() {
+            let mut card = card(&r);
+            card["name"] = json!("N".repeat(40));
+            card["curve"] = json!({ "pct": 85.4, "raised": 3.587, "target": 4.2, "pair": "USDG", "raised_usd": 3587 });
+            card["dev"] = json!("0x767de1a44a0adf710aac16450de9542bd8e75caa");
+            card["creator_tax_pct"] = json!(2.0);
+            card["security"] = json!({
+                "honeypot": false, "cannot_sell_all": false, "buy_tax_pct": 0.0, "sell_tax_pct": 0.0,
+                "tax_changeable": false, "mintable": false, "owner_can_change_balance": false,
+                "blacklist": false, "pausable": false, "proxy": false, "hidden_owner": false, "source": "GoPlus",
+            });
+            let reply = crate::shape::compact(crate::shape::ok(
+                card,
+                &["Pons launch record unreadable; curve % and dev unknown".into()],
+            ));
+            assert!(
+                crate::shape::size(&reply) <= crate::shape::MAX_REPLY,
+                "{}",
+                crate::shape::size(&reply)
+            );
         }
     }
 
     #[test]
-    fn blow_off_top_is_flagged_with_numbers() {
-        let flags = flags(&snapshot(), 86_400);
-        let joined = flags.join(" | ");
-        assert!(joined.contains("extended: +40% 6h, +2166% 24h"), "{joined}");
-        assert!(joined.contains("fading: -11%"), "{joined}");
-        assert!(
-            joined.contains("churn: 24h volume is 69x liquidity"),
-            "{joined}"
-        );
-        assert!(
-            joined.contains("thin_exit: fdv is 76x liquidity"),
-            "{joined}"
-        );
-        assert!(
-            joined.contains("sellers_in_control: 400 buys vs 700 sells"),
-            "{joined}"
-        );
-        assert!(!joined.contains("fresh"));
+    fn rows_use_integer_counts() {
+        for r in recorded() {
+            let row = row(&r);
+            assert!(
+                row["holders"].is_null() || row["holders"].is_i64(),
+                "{}",
+                row["holders"]
+            );
+        }
     }
 
     #[test]
-    fn steady_pool_has_no_flags() {
-        let steady = Snapshot {
-            liquidity_usd: Some(500_000.0),
-            fdv_usd: Some(5_000_000.0),
-            created: Some(0),
-            change: Win {
-                h1: Some(1.0),
-                h6: Some(5.0),
-                h24: Some(12.0),
-                ..Default::default()
-            },
-            volume: Win {
-                h24: Some(400_000.0),
-                ..Default::default()
-            },
-            buys: Win {
-                h1: Some(20),
-                h24: Some(900),
-                ..Default::default()
-            },
-            sells: Win {
-                h1: Some(18),
-                h24: Some(800),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        assert!(flags(&steady, 30 * 86_400).is_empty());
-    }
-
-    #[test]
-    fn idle_deep_pool_is_parked_liquidity() {
-        let mut parked = snapshot();
-        parked.liquidity_usd = Some(602_000.0);
-        parked.volume.h24 = Some(3.0);
-        let joined = flags(&parked, 86_400).join(" | ");
-        assert!(
-            joined.contains("parked_liquidity: $602000 liquidity but $3 traded"),
-            "{joined}"
-        );
-        assert!(!flags(&snapshot(), 86_400).join(" ").contains("parked"));
-    }
-
-    #[test]
-    fn slippage_scales_with_depth_and_recent_moves() {
-        let deep = Snapshot {
-            liquidity_usd: Some(400_000.0),
-            volume: Win {
-                h24: Some(1_000_000.0),
-                ..Default::default()
-            },
-            change: Win {
-                m5: Some(0.2),
-                h1: Some(-1.0),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let calm = Slippage::of(&deep, false);
-        assert_eq!((calm.suggested_bps(), calm.tradeable()), (50, "yes"));
-        assert_eq!(Slippage::of(&deep, true).needed_bps, 300);
-        let mut idle = deep.clone();
-        idle.volume.h24 = Some(3.0);
-        assert_eq!(Slippage::of(&idle, false).tradeable(), "unproven_depth");
-
-        let mut thin = deep.clone();
-        thin.liquidity_usd = Some(30_000.0);
-        thin.change.m5 = Some(-3.1);
-        let busy = Slippage::of(&thin, false);
-        assert_eq!(busy.needed_bps, 325);
-        assert_eq!(busy.basis, "typical 5m move 3.1%, liquidity $30000");
-
-        thin.change.h1 = Some(40.0);
-        let hot = Slippage::of(&thin, false);
-        assert_eq!(hot.needed_bps, 1175);
+    fn wallet_top10_skips_pool_and_locker() {
+        let holders = vec![
+            json!({ "address": "0x8366a39cc670b4001a1121b8f6a443a643e40951", "shiftedBalance": 108.0 }),
+            json!({ "address": "0x267444d099b10fb5ed7c3cc7b7c767adca574952", "shiftedBalance": 82.0 }),
+            json!({ "address": "0x4cfd59ad1d7236af5c98248435b38e96554cd15b", "shiftedBalance": 27.0 }),
+        ];
+        let labels = HolderLabels::new(None, None, None);
         assert_eq!(
-            (hot.suggested_bps(), hot.tradeable()),
-            (500, "too_volatile")
+            top10_wallets_pct(&holders, &labels, Some(1000.0)),
+            json!(2.7)
         );
-        thin.change.h1 = Some(25.0);
-        assert_eq!(
-            Slippage::of(&thin, false).tradeable(),
-            "only_with_explicit_ok"
-        );
-    }
-
-    #[test]
-    fn main_pool_prefers_active_base_pools() {
-        let mut quiet = snapshot();
-        quiet.pool_id = "quiet".into();
-        quiet.volume.h24 = Some(10.0);
-        quiet.liquidity_usd = Some(10.0);
-        let mut other = snapshot();
-        other.pool_id = "quote-side".into();
-        other.token = "0xother".into();
-        let pools = vec![quiet, snapshot(), other];
-        assert_eq!(main_pool(&pools, "0xtoken").unwrap().pool_id, "0xpool");
     }
 }

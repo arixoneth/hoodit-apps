@@ -1,332 +1,283 @@
-use super::{arg, failure};
+use super::{codex_id, exec};
 use crate::amount;
-use crate::app::{Call, HooditApp};
-use crate::market::{MAX_SLIPPAGE_BPS, Slippage, main_pool};
-use crate::model::{self, one};
-use crate::providers::{dex::Dex, lifi::Lifi, rpc::Rpc};
+use crate::app::{Call, HooditApp, Runtime, Ttl};
+use crate::providers::{self, Fail, NATIVE, Quote, codex, lifi_quote};
+use crate::shape::{self, num, ok, pct, usd};
 use aomi_sdk::schemars::JsonSchema;
 use aomi_sdk::{DynAomiTool, DynToolCallCtx};
 use num_bigint::BigUint;
-use num_traits::Zero;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-/// LI.FI needs a sender; balances and approvals are not evaluated for it.
-const PLACEHOLDER_SENDER: &str = "0x000000000000000000000000000000000000dead";
+/// Quotes come from this address when the user has no wallet connected.
+/// LI.FI prices a route without moving funds; it only needs an address.
+const NEUTRAL: &str = "0x0bf3e6f5ef3d32dccce208a1dd8fa9251893dd91";
+const THIN_EXIT_PCT: f64 = 10.0;
+
+#[derive(Deserialize, JsonSchema, Clone, Copy, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    /// Buy with eth_amount (or usd_amount) and sell straight back: the cost of a round trip.
+    RoundTrip,
+    /// Sell token_amount (or usd_amount worth) for ETH.
+    Sell,
+}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExitArgs {
-    /// Exact 0x token contract. Resolve tickers with hoodit_search first.
+    /// Exact 0x token contract.
     pub token: String,
-    /// sell: quote selling `amount` tokens. round_trip: quote buying with
-    /// `eth_amount` ETH and selling the tokens straight back. Omit for sell.
-    #[serde(default)]
-    #[schemars(with = "String", extend("enum" = ["sell", "round_trip"], "default" = "sell"))]
-    pub mode: Option<String>,
-    /// Tokens to sell in whole units, e.g. "2000000" or "0.5". Required for sell.
-    #[serde(default)]
-    #[schemars(with = "Option<String>", pattern(r"^(0|[1-9][0-9]*)(\.[0-9]+)?$"))]
-    pub amount: Option<String>,
-    /// Share of `amount` to sell in basis points (5000 = half). Omit for all.
-    #[serde(default)]
-    #[schemars(with = "u16", range(min = 1, max = 10000), extend("default" = 10000))]
-    pub fraction_bps: Option<u16>,
-    /// ETH to spend for round_trip, e.g. "0.05". Required for round_trip.
-    #[serde(default)]
-    #[schemars(with = "Option<String>", pattern(r"^(0|[1-9][0-9]*)(\.[0-9]+)?$"))]
+    /// round_trip or sell. null = round_trip when eth_amount or usd_amount is set, else sell.
+    pub mode: Option<Mode>,
+    /// ETH to buy with for a round trip, e.g. "0.1". null = use usd_amount.
     pub eth_amount: Option<String>,
-    /// Asset to receive when selling: eth or usdg. Omit for eth.
-    #[serde(default)]
-    #[schemars(with = "String", extend("enum" = ["eth", "usdg"], "default" = "eth"))]
-    pub receive: Option<String>,
-    /// Slippage tolerance in basis points (300 = 3%), 1 to 1000. Omit to use
-    /// the tolerance Hoodit suggests for this coin.
-    #[serde(default)]
-    #[schemars(with = "Option<u32>", range(min = 1, max = 1000))]
-    pub slippage_bps: Option<u32>,
-    /// Optional 0x wallet the trade would come from; omit for a neutral sender.
-    #[serde(default)]
-    #[schemars(with = "Option<String>")]
-    pub wallet_address: Option<String>,
+    /// Tokens to sell, in whole units, e.g. "250000". null = use usd_amount.
+    pub token_amount: Option<String>,
+    /// Size in USD instead; converted at the current price. null = not used.
+    pub usd_amount: Option<f64>,
+    /// Slippage tolerance in percent for the quotes. null = 10.
+    pub slippage_pct: Option<f64>,
 }
 
-pub struct CheckExit;
+pub struct Exit;
 
-impl DynAomiTool for CheckExit {
+fn leg(result: &Result<Quote, Fail>) -> Value {
+    match result {
+        Ok(q) => {
+            json!({ "status": "quoted", "route": q.route, "gas_usd": usd(q.gas_usd), "fees_usd": usd(q.fee_usd) })
+        }
+        Err(f) if f.code == "NO_ROUTE" => json!({ "status": "no_route", "why": f.message }),
+        Err(f) => {
+            json!({ "status": "unavailable", "why": f.message, "retry_after_s": f.retry_after_s })
+        }
+    }
+}
+
+fn units(raw: &str, decimals: u8) -> Option<f64> {
+    raw.parse::<f64>()
+        .ok()
+        .map(|v| v / 10f64.powi(decimals as i32))
+}
+
+/// Sells from the user's wallet if it holds enough, else the neutral
+/// address, else (curve tokens only quote from a holder) a real holder.
+async fn sell_quote(
+    rt: &Runtime,
+    call: &Call,
+    token: &str,
+    amount: &BigUint,
+    slippage: f64,
+) -> (Result<Quote, Fail>, &'static str) {
+    let raw = amount.to_string();
+    let wanted = raw.parse::<u128>().unwrap_or(u128::MAX);
+    if let Some(w) = &call.wallet
+        && providers::balance_of(rt, token, w)
+            .await
+            .is_some_and(|b| b >= wanted)
+    {
+        let quote = lifi_quote(rt, call, token, NATIVE, &raw, w, slippage).await;
+        return (quote, "your wallet");
+    }
+    let first = lifi_quote(rt, call, token, NATIVE, &raw, NEUTRAL, slippage).await;
+    if !matches!(&first, Err(f) if f.code == "NO_ROUTE") {
+        return (first, "a neutral address");
+    }
+    let q = format!(
+        "{{ h: holders(input: {{tokenId: \"{}\", limit: 8}}) {{ items {{ address }} }} }}",
+        codex_id(token)
+    );
+    let Ok((data, _)) = codex(rt, call, &q, json!({}), Ttl::Minute).await else {
+        return (first, "a neutral address");
+    };
+    for h in data
+        .pointer("/h/items")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
+        let Some(addr) = h.get("address").and_then(Value::as_str) else {
+            continue;
+        };
+        if providers::is_wallet(rt, addr).await
+            && providers::balance_of(rt, token, addr)
+                .await
+                .is_some_and(|b| b >= wanted)
+        {
+            let quote = lifi_quote(rt, call, token, NATIVE, &raw, addr, slippage).await;
+            return (
+                quote,
+                "a wallet holding the token (curve sells only quote from holders)",
+            );
+        }
+    }
+    (first, "a neutral address")
+}
+
+impl DynAomiTool for Exit {
     type App = HooditApp;
     type Args = ExitArgs;
-    const NAME: &'static str = "hoodit_check_exit";
-    const DESCRIPTION: &'static str = "Check whether a position can actually be exited at a given size with live LI.FI quotes: sell an exact token amount, or buy with an ETH amount and sell straight back (round_trip) to measure the total cost of getting in and out. Returns route, expected and minimum output at the slippage tolerance, loss, gas, and the tolerance a chat trade of this coin needs. Read-only: never prepares or signs a trade.";
+    const NAME: &'static str = "hoodit_exit";
+    const DESCRIPTION: &'static str = "Can a size get out? Live LI.FI quotes (the router the host trades through) on Robinhood Chain. round_trip: buy with eth_amount and sell the tokens straight back; loss_pct is ETH lost, fees and price impact included, gas reported separately. sell: ETH received for token_amount. Each leg reports quoted, no_route or unavailable and its route; thin_exit is true above 10% loss. Quotes, not fills: independent legs at current prices.";
 
-    fn run(app: &HooditApp, args: ExitArgs, _ctx: DynToolCallCtx) -> Result<Value, String> {
-        let token = arg!(model::address(&args.token));
-        let mode = args.mode.as_deref().unwrap_or("sell");
-        let receive = args.receive.as_deref().unwrap_or("eth");
-        let (receive_id, receive_decimals) = match receive {
-            "eth" => (model::NATIVE, 18),
-            "usdg" => (model::USDG, 6),
-            _ => {
-                return Ok(model::error(
-                    "INVALID_ARGUMENT",
-                    "receive must be eth or usdg",
-                    false,
-                ));
-            }
-        };
-        let fraction = args.fraction_bps.unwrap_or(10_000);
-        if !(1..=10_000).contains(&fraction) {
-            return Ok(model::error(
-                "INVALID_ARGUMENT",
-                "fraction_bps must be 1 to 10000",
-                false,
-            ));
-        }
-        let wallet = arg!(
-            args.wallet_address
-                .as_deref()
-                .map(model::address)
-                .transpose()
-        );
-        let sender = wallet.clone().unwrap_or_else(|| PLACEHOLDER_SENDER.into());
-        let eth_in = match (mode, args.eth_amount.as_deref(), args.amount.as_deref()) {
-            ("round_trip", Some(eth), _) => Some(arg!(amount::from_decimal(eth, 18))),
-            ("round_trip", None, _) => {
-                return Ok(model::error(
-                    "INVALID_ARGUMENT",
-                    "round_trip requires eth_amount",
-                    false,
-                ));
-            }
-            ("sell", _, Some(_)) => None,
-            ("sell", _, None) => {
-                return Ok(model::error(
-                    "INVALID_ARGUMENT",
-                    "sell requires amount in whole token units",
-                    false,
-                ));
-            }
-            _ => {
-                return Ok(model::error(
-                    "INVALID_ARGUMENT",
-                    "mode must be sell or round_trip",
-                    false,
-                ));
-            }
-        };
-        if eth_in.as_ref().is_some_and(Zero::is_zero) {
-            return Ok(model::error(
-                "INVALID_ARGUMENT",
-                "eth_amount must be greater than zero",
-                false,
-            ));
-        }
-        if args
-            .slippage_bps
-            .is_some_and(|bps| !(1..=MAX_SLIPPAGE_BPS).contains(&bps))
-        {
-            return Ok(model::error(
-                "INVALID_ARGUMENT",
-                "slippage_bps must be 1 to 1000 (0.01% to 10%)",
-                false,
-            ));
-        }
-        let rt = app.runtime()?;
-        let mut call = Call::new(25);
-        let suggested = match Dex::new(&rt).token_pools(&call, &token) {
-            Ok(pools) => {
-                main_pool(&pools, &token).map(|p| Slippage::of(p, p.kind == Some("curve")))
-            }
-            Err(error) => {
-                call.note(format!(
-                    "slippage suggestion unavailable: {}",
-                    error.message
-                ));
-                None
-            }
-        };
-        let slippage_bps = args
-            .slippage_bps
-            .or_else(|| suggested.as_ref().map(Slippage::suggested_bps))
-            .unwrap_or(model::FALLBACK_SLIPPAGE_BPS);
-        let decimals = match Rpc::new(&rt).head_and_decimals(&call, &[&token]) {
-            Ok((_, _, decimals)) => decimals[0],
-            Err(error) => return Ok(failure(error)),
-        };
-        let lifi = Lifi::new(&rt);
-        let (buy, size) = match &eth_in {
-            Some(eth_in) => {
-                match lifi.quote(
-                    &call,
-                    &sender,
-                    model::NATIVE,
-                    &token,
-                    &eth_in.to_string(),
-                    slippage_bps,
-                ) {
-                    Ok(quote) => {
-                        let Some(received) = model::string(&quote, &["estimate", "toAmount"])
-                            .and_then(|v| amount::atomic(&v).ok())
-                        else {
-                            return Ok(model::error(
-                                "BAD_RESPONSE",
-                                "LI.FI buy quote has no output amount",
-                                false,
-                            ));
+    fn run(app: &HooditApp, args: ExitArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
+        exec(app, &ctx, |rt, mut call| async move {
+            let token = super::arg!(shape::address(&args.token));
+            let slippage = (args.slippage_pct.unwrap_or(10.0).clamp(0.5, 30.0)) / 100.0;
+            let mode = args.mode.unwrap_or(if args.token_amount.is_some() {
+                Mode::Sell
+            } else {
+                Mode::RoundTrip
+            });
+            let Some(decimals) = providers::decimals(&rt, &token).await else {
+                return shape::error(
+                    "UNAVAILABLE",
+                    "could not read the token's decimals",
+                    Some(10),
+                );
+            };
+            // USD sizing needs prices: one bundled request for ETH and the token.
+            let (eth_usd, token_usd) = if args.usd_amount.is_some() {
+                let q = format!(
+                    "{{ s: filterTokens(tokens: [\"{}\", \"{}\"], limit: 2) {{ results {{ priceUSD token {{ address }} }} }} }}",
+                    codex_id(&token),
+                    codex_id("0x0bd7d308f8e1639fab988df18a8011f41eacad73")
+                );
+                match codex(&rt, &call, &q, json!({}), Ttl::Live).await {
+                    Ok((d, _)) => {
+                        let price_of = |a: &str| {
+                            d.pointer("/s/results")
+                                .and_then(Value::as_array)
+                                .and_then(|rs| {
+                                    rs.iter()
+                                        .find(|r| {
+                                            r.pointer("/token/address")
+                                                .and_then(Value::as_str)
+                                                .is_some_and(|x| x.eq_ignore_ascii_case(a))
+                                        })
+                                        .and_then(|r| r.get("priceUSD").and_then(num))
+                                })
                         };
-                        (summarize(&quote, eth_in, 18, decimals), received)
+                        (
+                            price_of("0x0bd7d308f8e1639fab988df18a8011f41eacad73"),
+                            price_of(&token),
+                        )
                     }
-                    Err(error) if error.code == "NO_ROUTE" => {
-                        call.note("no route to buy at this size");
-                        return Ok(model::ok(
-                            json!({"token":token,"mode":mode,"buy":no_route(eth_in, 18),"sell":Value::Null}),
-                            call.notes,
-                        ));
+                    Err(fail) => return fail.to_value(),
+                }
+            } else {
+                (None, None)
+            };
+            match mode {
+                Mode::RoundTrip => {
+                    let eth = match (&args.eth_amount, args.usd_amount, eth_usd) {
+                        (Some(e), _, _) => e.clone(),
+                        (None, Some(u), Some(p)) if p > 0.0 => format!("{:.6}", u / p),
+                        _ => {
+                            return shape::error(
+                                "INVALID_ARGUMENT",
+                                "round_trip needs eth_amount or usd_amount",
+                                None,
+                            );
+                        }
+                    };
+                    let wei = super::arg!(amount::from_decimal(&eth, 18));
+                    let from = call.wallet.clone().unwrap_or_else(|| NEUTRAL.to_string());
+                    let buy = lifi_quote(
+                        &rt,
+                        &call,
+                        NATIVE,
+                        &token,
+                        &wei.to_string(),
+                        &from,
+                        slippage,
+                    )
+                    .await;
+                    let (sell, received, sold_from) = match &buy {
+                        Ok(b) => {
+                            let got = b.to_amount.parse::<BigUint>().unwrap_or_default();
+                            let (s, from) = sell_quote(&rt, &call, &token, &got, slippage).await;
+                            (Some(s), Some(got), Some(from))
+                        }
+                        Err(_) => (None, None, None),
+                    };
+                    let eth_in = units(&wei.to_string(), 18);
+                    let eth_back = sell
+                        .as_ref()
+                        .and_then(|s| s.as_ref().ok())
+                        .and_then(|q| units(&q.to_amount, 18));
+                    let loss = match (eth_in, eth_back) {
+                        (Some(i), Some(b)) if i > 0.0 => Some((1.0 - b / i) * 100.0),
+                        _ => None,
+                    };
+                    if sell
+                        .as_ref()
+                        .is_some_and(|s| matches!(s, Err(f) if f.code == "NO_ROUTE"))
+                    {
+                        call.gap("no sell route at this size: buying would be a trap");
                     }
-                    Err(error) => return Ok(failure(error)),
+                    ok(
+                        json!({
+                            "token": token,
+                            "mode": "round_trip",
+                            "eth_in": eth,
+                            "usd_in": usd(eth_usd.zip(eth_in).map(|(p, e)| p * e)),
+                            "tokens_bought": received.map(|r| amount::format(&r, decimals)),
+                            "eth_back": eth_back.map(|b| shape::sig(b, 4)),
+                            "loss_pct": pct(loss),
+                            "thin_exit": loss.map(|l| l > THIN_EXIT_PCT),
+                            "buy": leg(&buy),
+                            "sell": sell.as_ref().map(leg),
+                            "buy_quoted_from": if call.wallet.is_some() { "your wallet" } else { "a neutral address" },
+                            "sell_quoted_from": sold_from,
+                            "note": "independent quotes at current prices; gas excluded from loss_pct",
+                        }),
+                        &call.gaps,
+                    )
+                }
+                Mode::Sell => {
+                    let size = match (&args.token_amount, args.usd_amount, token_usd) {
+                        (Some(t), _, _) => super::arg!(amount::from_decimal(t, decimals)),
+                        (None, Some(u), Some(p)) if p > 0.0 => {
+                            super::arg!(amount::from_decimal(
+                                &format!("{:.*}", decimals.min(6) as usize, u / p),
+                                decimals
+                            ))
+                        }
+                        _ => {
+                            return shape::error(
+                                "INVALID_ARGUMENT",
+                                "sell needs token_amount or usd_amount",
+                                None,
+                            );
+                        }
+                    };
+                    let (sell, sold_from) = sell_quote(&rt, &call, &token, &size, slippage).await;
+                    let eth_out = sell.as_ref().ok().and_then(|q| units(&q.to_amount, 18));
+                    let eth_min = sell.as_ref().ok().and_then(|q| units(&q.to_amount_min, 18));
+                    let value_usd =
+                        token_usd.and_then(|p| units(&size.to_string(), decimals).map(|t| t * p));
+                    let impact = match (eth_out, eth_usd, value_usd) {
+                        (Some(o), Some(p), Some(v)) if v > 0.0 => Some((1.0 - o * p / v) * 100.0),
+                        _ => None,
+                    };
+                    ok(
+                        json!({
+                            "token": token,
+                            "mode": "sell",
+                            "tokens_in": amount::format(&size, decimals),
+                            "eth_out": eth_out.map(|o| shape::sig(o, 4)),
+                            "eth_min_out": eth_min.map(|o| shape::sig(o, 4)),
+                            "loss_vs_price_pct": pct(impact),
+                            "thin_exit": impact.map(|l| l > THIN_EXIT_PCT),
+                            "sell": leg(&sell),
+                            "quoted_from": sold_from,
+                            "note": "a quote, not a fill",
+                        }),
+                        &call.gaps,
+                    )
                 }
             }
-            None => {
-                let requested = arg!(amount::from_decimal(
-                    args.amount.as_deref().unwrap_or("0"),
-                    decimals
-                ));
-                (Value::Null, amount::fraction(&requested, fraction))
-            }
-        };
-        if size.is_zero() {
-            return Ok(model::error(
-                "INVALID_ARGUMENT",
-                "the sell size rounds to zero",
-                false,
-            ));
-        }
-        let sell = match lifi.quote(
-            &call,
-            &sender,
-            &token,
-            receive_id,
-            &size.to_string(),
-            slippage_bps,
-        ) {
-            Ok(quote) => summarize(&quote, &size, decimals, receive_decimals),
-            Err(error) if error.code == "NO_ROUTE" || !buy.is_null() => {
-                call.note(format!(
-                    "the sell could not be quoted ({}): the exit is unproven",
-                    error.message
-                ));
-                no_route(&size, decimals)
-            }
-            Err(error) => return Ok(failure(error)),
-        };
-        let round_trip_loss_pct = match (&eth_in, model::string(&sell, &["expected_out_atomic"])) {
-            (Some(spent), Some(back)) if receive == "eth" => loss(spent, &back),
-            _ => None,
-        };
-        let mut sell = sell;
-        if let Some(object) = sell.as_object_mut() {
-            object.remove("expected_out_atomic");
-        }
-        let mut buy = buy;
-        if let Some(object) = buy.as_object_mut() {
-            object.remove("expected_out_atomic");
-        }
-        Ok(model::ok(
-            json!({
-                "token": token,
-                "mode": mode,
-                "receive": receive,
-                "sender": if wallet.is_some() { "wallet" } else { "neutral placeholder (balances and approvals not checked)" },
-                "buy": buy,
-                "sell": sell,
-                "round_trip_loss_pct": round_trip_loss_pct,
-                "slippage_bps": slippage_bps,
-                "slippage": suggested.as_ref().map(Slippage::view),
-                "executable": false,
-            }),
-            call.notes,
-        ))
-    }
-}
-
-fn no_route(amount_in: &BigUint, decimals: u8) -> Value {
-    json!({"route_found": false, "amount_in": amount::format(amount_in, decimals)})
-}
-
-fn summarize(quote: &Value, amount_in: &BigUint, in_decimals: u8, out_decimals: u8) -> Value {
-    let estimate = quote.get("estimate").cloned().unwrap_or(Value::Null);
-    let out = |key: &str| model::string(&estimate, &[key]).and_then(|v| amount::atomic(&v).ok());
-    let usd = |key: &str| model::number(&estimate, &[key]);
-    let costs = |key: &str| {
-        let values: Vec<f64> = estimate
-            .get(key)
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(|c| model::number(c, &["amountUSD"]))
-            .collect();
-        (!values.is_empty()).then(|| values.iter().sum::<f64>())
-    };
-    let (value_in, value_out) = (usd("fromAmountUSD"), usd("toAmountUSD"));
-    let loss_pct = match (value_in, value_out) {
-        (Some(i), Some(o)) if i > 0.0 => Some(one((i - o) / i * 100.0)),
-        _ => None,
-    };
-    let from_native = model::string(quote, &["action", "fromToken", "address"])
-        .is_some_and(|a| a == model::NATIVE);
-    json!({
-        "route_found": true,
-        "route": model::string(quote, &["tool"]),
-        "amount_in": amount::format(amount_in, in_decimals),
-        "expected_out": out("toAmount").map(|v| amount::format(&v, out_decimals)),
-        "expected_out_atomic": out("toAmount").map(|v| v.to_string()),
-        "min_out": out("toAmountMin").map(|v| amount::format(&v, out_decimals)),
-        "value_in_usd": value_in.map(model::usd),
-        "value_out_usd": value_out.map(model::usd),
-        "loss_pct": loss_pct,
-        "gas_usd": costs("gasCosts").map(model::usd),
-        "fees_usd": costs("feeCosts").map(model::usd),
-        "approval_required": !from_native && model::string(&estimate, &["approvalAddress"]).is_some(),
-    })
-}
-
-/// Round-trip loss as a percentage of the ETH spent, from exact amounts.
-fn loss(spent: &BigUint, back: &str) -> Option<Value> {
-    let back = amount::atomic(back).ok()?;
-    let spent_f: f64 = spent.to_string().parse().ok()?;
-    let back_f: f64 = back.to_string().parse().ok()?;
-    (spent_f > 0.0).then(|| one((spent_f - back_f) / spent_f * 100.0))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn summarizes_route_loss_and_costs() {
-        let quote = json!({
-            "tool":"kyberswap",
-            "action":{"fromToken":{"address":"0x1111111111111111111111111111111111111111"}},
-            "estimate":{"toAmount":"359197303636875","toAmountMin":"357401317118691","fromAmountUSD":"1.0133","toAmountUSD":"0.9644","approvalAddress":"0xB477751B76CF82d00a686A1232f5fCD772414Af3","gasCosts":[{"amountUSD":"0.0189"}],"feeCosts":[{"amountUSD":"0.0025"}]}
-        });
-        let s = summarize(
-            &quote,
-            &amount::atomic("1000000000000000000000").unwrap(),
-            18,
-            18,
-        );
-        assert_eq!(s["route"], "kyberswap");
-        assert_eq!(s["amount_in"], "1000");
-        assert_eq!(s["expected_out"], "0.000359197303636875");
-        assert_eq!(s["loss_pct"], json!(4.8));
-        assert_eq!(s["gas_usd"], json!(0.02));
-        assert_eq!(s["approval_required"], true);
-    }
-
-    #[test]
-    fn round_trip_loss_uses_exact_eth_amounts() {
-        let spent = amount::atomic("50000000000000000").unwrap();
-        assert_eq!(loss(&spent, "45000000000000000"), Some(json!(10.0)));
-        assert_eq!(loss(&BigUint::zero(), "1"), None);
+        })
     }
 }

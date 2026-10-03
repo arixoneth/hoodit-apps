@@ -1,248 +1,294 @@
-use super::{arg, eth_usd, failure, now};
-use crate::app::{Call, HooditApp, Runtime};
-use crate::market::chart::{
-    self, auto_interval, candles, earlier, flow, lifetime, rows, structure, wallet_picks,
-};
-use crate::market::swaps::{self, Market};
-use crate::market::{Snapshot, deepest_pool, main_pool};
-use crate::model::{self, one, sig, usd};
-use crate::providers::{ProviderError, dex::Dex, gecko::Gecko};
+use super::{codex_id, exec};
+use crate::app::{HooditApp, Ttl};
+use crate::providers::codex;
+use crate::shape::{self, num, ok, pct, price, usd};
 use aomi_sdk::schemars::JsonSchema;
 use aomi_sdk::{DynAomiTool, DynToolCallCtx};
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-/// Most swaps read per call; very busy pools show their latest few hours.
-const SWAP_BUDGET: usize = 2500;
+#[derive(Deserialize, JsonSchema, Clone, Copy)]
+pub enum Range {
+    #[serde(rename = "1h")]
+    H1,
+    #[serde(rename = "6h")]
+    H6,
+    #[serde(rename = "24h")]
+    H24,
+    #[serde(rename = "7d")]
+    D7,
+    #[serde(rename = "30d")]
+    D30,
+    /// The whole life since launch, curve included.
+    #[serde(rename = "life")]
+    Life,
+}
+
+#[derive(Deserialize, JsonSchema, Clone, Copy)]
+pub enum Interval {
+    #[serde(rename = "1m")]
+    M1,
+    #[serde(rename = "5m")]
+    M5,
+    #[serde(rename = "15m")]
+    M15,
+    #[serde(rename = "1h")]
+    H1,
+    #[serde(rename = "4h")]
+    H4,
+    #[serde(rename = "1d")]
+    D1,
+}
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ChartArgs {
-    /// Exact 0x token contract. Resolve tickers with hoodit_search first.
+    /// Exact 0x token contract.
     pub token: String,
-    /// Optional pool_id from a Hoodit result. Omit to use the most active pool
-    /// (the Pons curve while a token is still bonding).
-    #[serde(default)]
-    #[schemars(with = "Option<String>")]
-    pub pool_id: Option<String>,
-    /// Hours of history to read, 1 to 168. Omit for 24 (72 for quiet pools).
-    #[serde(default)]
-    #[schemars(with = "u16", range(min = 1, max = 168))]
-    pub hours: Option<u16>,
-    /// Candle width. Omit to fit the window in about 24 candles.
-    #[serde(default)]
-    #[schemars(with = "String", extend("enum" = ["1m", "5m", "15m", "1h", "4h", "1d"]))]
-    pub interval: Option<String>,
-    /// Latest individual trades to list, 0 to 10. Omit for 0; flow already
-    /// summarizes them.
-    #[serde(default)]
-    #[schemars(with = "u8", range(min = 0, max = 10), extend("default" = 0))]
-    pub recent_trades: Option<u8>,
+    /// Main range. The candle size is picked to give 24–60 bars. null = 24h.
+    pub range: Option<Range>,
+    /// Optional second, wider zoom returned as closes only, e.g. life next to 6h. null = none.
+    pub context_range: Option<Range>,
+    /// Override the candle size for the main range (zooming in). null = automatic.
+    pub interval: Option<Interval>,
+    /// Bars for the main range when interval is set, 10–60. null = 48.
+    pub bars: Option<u16>,
+    /// Unix seconds the main range ends at, to page back in time. null = now.
+    pub to: Option<i64>,
 }
 
-pub struct GetChart;
+fn resolution(i: Interval) -> (&'static str, i64) {
+    match i {
+        Interval::M1 => ("1", 60),
+        Interval::M5 => ("5", 300),
+        Interval::M15 => ("15", 900),
+        Interval::H1 => ("60", 3600),
+        Interval::H4 => ("240", 14_400),
+        Interval::D1 => ("1D", 86_400),
+    }
+}
 
-impl DynAomiTool for GetChart {
+/// (resolution, seconds per bar, bars) for a range; `life` uses the age.
+fn plan(range: Range, age_s: i64) -> (&'static str, i64, i64) {
+    match range {
+        Range::H1 => ("1", 60, 60),
+        Range::H6 => ("15", 900, 24),
+        Range::H24 => ("30", 1800, 48),
+        Range::D7 => ("240", 14_400, 42),
+        Range::D30 => ("720", 43_200, 60),
+        Range::Life => {
+            let (res, step) = match age_s {
+                s if s <= 6 * 3600 => ("5", 300),
+                s if s <= 2 * 86_400 => ("60", 3600),
+                s if s <= 10 * 86_400 => ("240", 14_400),
+                _ => ("1D", 86_400),
+            };
+            (res, step, (age_s / step + 1).clamp(2, 60))
+        }
+    }
+}
+
+fn label(range: Range) -> &'static str {
+    match range {
+        Range::H1 => "1h",
+        Range::H6 => "6h",
+        Range::H24 => "24h",
+        Range::D7 => "7d",
+        Range::D30 => "30d",
+        Range::Life => "life",
+    }
+}
+
+fn floats(v: &Value) -> Vec<Option<f64>> {
+    v.as_array()
+        .map(|a| a.iter().map(num).collect())
+        .unwrap_or_default()
+}
+
+/// Facts the model can quote, computed from the same bars it receives.
+fn facts(
+    o: &[Option<f64>],
+    h: &[Option<f64>],
+    l: &[Option<f64>],
+    c: &[Option<f64>],
+    vol: &[Option<f64>],
+) -> Value {
+    let first = o.iter().flatten().next().copied();
+    let last = c.iter().rev().flatten().next().copied();
+    let high = h.iter().flatten().copied().fold(f64::NAN, f64::max);
+    let low = l.iter().flatten().copied().fold(f64::NAN, f64::min);
+    let third = (vol.len() / 3).max(1);
+    let sum = |s: &[Option<f64>]| s.iter().flatten().sum::<f64>();
+    let early = sum(&vol[..third.min(vol.len())]);
+    let late = sum(&vol[vol.len().saturating_sub(third)..]);
+    let lows = |s: &[Option<f64>]| s.iter().flatten().copied().fold(f64::NAN, f64::min);
+    let n = l.len();
+    json!({
+        "open_usd": price(first),
+        "last_usd": price(last),
+        "change_pct": match (first, last) { (Some(a), Some(b)) if a > 0.0 => pct(Some((b / a - 1.0) * 100.0)), _ => Value::Null },
+        "high_usd": price(high.is_finite().then_some(high)),
+        "low_usd": price(low.is_finite().then_some(low)),
+        "from_high_pct": match last { Some(b) if high > 0.0 => pct(Some((b / high - 1.0) * 100.0)), _ => Value::Null },
+        "from_low_pct": match last { Some(b) if low > 0.0 => pct(Some((b / low - 1.0) * 100.0)), _ => Value::Null },
+        "volume_usd": usd(Some(sum(vol))),
+        "volume_last_vs_first_third_x": if early > 0.0 { json!(shape::sig(late / early, 2)) } else { Value::Null },
+        "low_last_third_vs_first_third_x": if n >= 6 {
+            let (a, b) = (lows(&l[..n / 3]), lows(&l[n - n / 3..]));
+            if a > 0.0 && b.is_finite() { json!(shape::sig(b / a, 3)) } else { Value::Null }
+        } else { Value::Null },
+    })
+}
+
+pub struct Chart;
+
+impl DynAomiTool for Chart {
     type App = HooditApp;
     type Args = ChartArgs;
-    const NAME: &'static str = "hoodit_get_chart";
-    const DESCRIPTION: &'static str = "Read a token's real chart and order flow in one pool: its whole life since launch (top, distance below it, best bounce, fading volume, phase), USD candles from on-chain swaps for the recent window, structure facts (range, distance from high and low, rising lows, volume trend, VWAP), buy and sell flow for the last hour and the window, the largest trades, and the wallets doing the most buying and selling. Use it before any claim about chart structure, momentum, or who is selling.";
+    const NAME: &'static str = "hoodit_chart";
+    const DESCRIPTION: &'static str = "USD price candles for a Robinhood Chain token, curve phase included, plus facts computed from the same bars (change, high/low, distance from high and low, volume trend as a ratio _x, whether recent lows sit above early lows). Pick a range (1h, 6h, 24h, 7d, 30d, life) and get 24–60 bars; add context_range for a second, wider zoom as closes. Times: t0 is unix seconds, t_min are minutes after t0. Read before any claim about chart structure.";
 
-    fn run(app: &HooditApp, args: ChartArgs, _ctx: DynToolCallCtx) -> Result<Value, String> {
-        let token = arg!(model::address(&args.token));
-        let pool_id = arg!(args.pool_id.as_deref().map(model::pool_id).transpose());
-        let fixed = match args.interval.as_deref() {
-            Some(label) => Some((
-                label,
-                arg!(chart::interval(label).ok_or_else(|| "unsupported interval".to_string())),
-            )),
-            None => None,
-        };
-        let rt = app.runtime()?;
-        let mut call = Call::new(30);
-        let pool = match select_pool(&rt, &mut call, &token, pool_id.as_deref()) {
-            Ok(pool) => pool,
-            Err(error) => return Ok(failure(error)),
-        };
-        let eth = pool
-            .quote_usd
-            .is_none()
-            .then(|| eth_usd(&rt, &call))
-            .flatten();
-        let market = match Market::resolve(&rt, &call, &pool, &token, eth) {
-            Ok(market) => market,
-            Err(error) => return Ok(failure(error)),
-        };
-        let per_day = pool.txns_24h();
-        let hours = args.hours.map(|h| h.clamp(1, 168) as i64).unwrap_or(
-            if per_day.is_some_and(|n| n < 200) {
-                72
+    fn run(app: &HooditApp, args: ChartArgs, ctx: DynToolCallCtx) -> Result<Value, String> {
+        exec(app, &ctx, |rt, mut call| async move {
+            let token = super::arg!(shape::address(&args.token));
+            let id = codex_id(&token);
+            let now = shape::now();
+            let to = args.to.unwrap_or(now).min(now);
+            // Token age is needed for `life`; ask for it in the same request.
+            let range = args.range.unwrap_or(Range::H24);
+            let needs_age =
+                matches!(range, Range::Life) || matches!(args.context_range, Some(Range::Life));
+            let age_s = if needs_age {
+                let q = format!(
+                    "{{ s: filterTokens(tokens: [\"{id}\"], limit: 1) {{ results {{ token {{ createdAt }} }} }} }}"
+                );
+                match codex(&rt, &call, &q, json!({}), Ttl::Slow).await {
+                    Ok((d, _)) => d
+                        .pointer("/s/results/0/token/createdAt")
+                        .and_then(num)
+                        .map(|c| now - c as i64)
+                        .unwrap_or(30 * 86_400),
+                    Err(fail) => return fail.to_value(),
+                }
             } else {
-                24
-            },
-        );
-        let mut found =
-            match swaps::fetch(&rt, &mut call, &market, hours * 3600, per_day, SWAP_BUDGET) {
-                Ok(found) => found,
-                Err(error) => return Ok(failure(error)),
+                0
             };
-        let now = now();
-        let pool_view = json!({"pool_id": pool.pool_id, "venue": pool.venue, "pair": pool.pair()});
-        let life = match Gecko::new(&rt).lifetime(&call, &pool.pool_id, &token, pool.age_hours(now))
-        {
-            Ok((label, series)) => lifetime(label, &series, now),
-            Err(error) => {
-                call.note(format!("lifetime chart unavailable: {}", error.message));
-                Value::Null
+            let (res, step, bars) = match args.interval {
+                Some(i) => {
+                    let (r, s) = resolution(i);
+                    (r, s, args.bars.unwrap_or(48).clamp(10, 60) as i64)
+                }
+                None => plan(range, age_s),
+            };
+            let from = to - step * bars;
+            let mut query = format!(
+                "{{ m: getTokenBars(symbol: \"{id}\", from: {from}, to: {to}, resolution: \"{res}\", removeEmptyBars: true, countback: {bars}) {{ t o h l c volume buyVolume sellVolume }}"
+            );
+            let context = args.context_range.inspect(|&cr| {
+                let (r2, s2, b2) = plan(cr, age_s);
+                let b2 = b2.min(40);
+                query.push_str(&format!(
+                    " x: getTokenBars(symbol: \"{id}\", from: {}, to: {now}, resolution: \"{r2}\", removeEmptyBars: true, countback: {b2}) {{ t c }}",
+                    now - s2 * b2
+                ));
+            });
+            query.push_str(" }");
+            let (data, note) = match codex(&rt, &call, &query, json!({}), Ttl::Live).await {
+                Ok(found) => found,
+                Err(fail) => return fail.to_value(),
+            };
+            if let Some(note) = note {
+                call.gap(note);
             }
-        };
-        if found.swaps.is_empty() {
-            call.note(format!("no swaps in the last {hours}h in this pool"));
-            return Ok(model::ok(
-                json!({"token": token, "pool": pool_view, "hours_requested": hours, "lifetime": life}),
-                call.notes,
-            ));
-        }
-        let picks = wallet_picks(&found.swaps, &market);
-        swaps::annotate(&rt, &mut call, &market, &mut found, &picks);
-        let trades = &found.swaps;
-        // Size candles to the data, not the window: a coin launched three hours
-        // ago gets 5m candles even when 24h were requested.
-        let first = trades
-            .first()
-            .map_or(found.from_ts, |s| s.ts.max(found.from_ts));
-        let span = (found.to_ts - first).max(60);
-        // A requested width too fine for the window widens to fit it, so the
-        // structure always describes the whole window rather than its tail.
-        let fitted = auto_interval(span);
-        let (label, secs) = match fixed {
-            Some((label, secs)) if secs >= fitted.1 => (label, secs),
-            _ => fitted,
-        };
-        let mut series = candles(trades, &market, secs);
-        if series.len() > 25 {
-            series.drain(..series.len() - 25);
-        }
-        let covered = one((found.to_ts - found.from_ts) as f64 / 3600.0);
-        let mut out = json!({
-            "token": token,
-            "pool": pool_view,
-            "window": {
-                "hours": covered,
-                "hours_requested": hours,
-                "swaps": trades.len(),
-                "complete": !found.truncated,
-                "coverage": if found.truncated {
-                    format!("busy pool: candles and structure cover only the latest {covered}h; `earlier` samples the full {hours}h and has the change, high and low over it")
-                } else {
-                    format!("every swap of the last {covered}h")
-                },
-            },
-            "lifetime": life,
-            "interval": label,
-            "candles": rows(&series, now),
-            "structure": structure(&series, trades, &market, now),
-            "flow": flow(trades, &market, now),
-            "pricing": pricing(&rt, &mut call, &market, &pool),
-        });
-        if found.truncated && !found.context.is_empty() {
-            out["earlier"] = earlier(&found.context, &series, found.lookback_ts, now);
-        }
-        let recent = args.recent_trades.unwrap_or(0).min(10) as usize;
-        if recent > 0 {
-            out["recent_trades"] = trades
-                .iter()
-                .rev()
-                .take(recent)
-                .map(|s| json!({"side": if s.buy {"buy"} else {"sell"}, "usd": usd(s.usd(&market)), "price_usd": sig(s.price_usd(&market)), "minutes_ago": (now - s.ts) / 60, "wallet": s.wallet}))
-                .collect();
-        }
-        Ok(model::ok(out, call.notes))
+            let m = &data["m"];
+            let t: Vec<i64> = m["t"]
+                .as_array()
+                .map(|a| a.iter().filter_map(Value::as_i64).collect())
+                .unwrap_or_default();
+            if t.is_empty() {
+                return shape::error(
+                    "NO_DATA",
+                    "no trades in this range; the token may be inactive or not indexed",
+                    None,
+                );
+            }
+            let (o, h, l, c) = (
+                floats(&m["o"]),
+                floats(&m["h"]),
+                floats(&m["l"]),
+                floats(&m["c"]),
+            );
+            let vol = floats(&m["volume"]);
+            let (buy, sell) = (floats(&m["buyVolume"]), floats(&m["sellVolume"]));
+            let sum = |s: &[Option<f64>]| s.iter().flatten().sum::<f64>();
+            let sig3 = |s: &[Option<f64>]| {
+                s.iter()
+                    .map(|v| v.map(|x| json!(shape::sig(x, 3))).unwrap_or(Value::Null))
+                    .collect::<Vec<_>>()
+            };
+            let covered_h =
+                (t.last().unwrap_or(&0) - t.first().unwrap_or(&0) + step) as f64 / 3600.0;
+            let mut out = json!({
+                "token": token,
+                "range": label(range),
+                "candle": res,
+                "bars": t.len(),
+                "covered_h": shape::sig(covered_h, 3),
+                "facts": facts(&o, &h, &l, &c, &vol),
+                "flow_usd": { "buy": usd(Some(sum(&buy))), "sell": usd(Some(sum(&sell))) },
+                "t0": t[0],
+                "t_min": t.iter().map(|x| (x - t[0]) / 60).collect::<Vec<_>>(),
+                "h": sig3(&h), "l": sig3(&l), "c": sig3(&c),
+                "v_usd": vol.iter().map(|v| usd(*v)).collect::<Vec<_>>(),
+            });
+            if let Some(cr) = context {
+                let x = &data["x"];
+                out["context"] = json!({
+                    "range": label(cr),
+                    "t0": x["t"].get(0),
+                    "step_min": x["t"].as_array().filter(|a| a.len() > 1).and_then(|a| Some((a[1].as_i64()? - a[0].as_i64()?) / 60)),
+                    "c": sig3(&floats(&x["c"])),
+                });
+            }
+            // Highs and lows are the first thing to go: facts keep the extremes.
+            if shape::size(&out) > shape::MAX_REPLY - 300 {
+                if let Some(m) = out.as_object_mut() {
+                    m.remove("h");
+                    m.remove("l");
+                }
+                call.gap("per-bar highs and lows left out to keep the reply short");
+            }
+            ok(out, &call.gaps)
+        })
     }
 }
 
-/// How candle prices relate to USD. Trades are converted at the quote's
-/// current price, which is exact for USDG, close for ETH, and misleading for
-/// a volatile quote token, so that case carries the quote's own moves.
-fn pricing(rt: &Runtime, call: &mut Call, market: &Market, pool: &Snapshot) -> Value {
-    let quote_symbol = if pool.token == market.token {
-        &pool.quote_symbol
-    } else {
-        &pool.symbol
-    };
-    match market.quote.as_str() {
-        model::USDG => json!("USD (USDG pool)"),
-        model::WETH | model::NATIVE => json!(format!(
-            "USD at the current ETH price of ${}",
-            usd(market.quote_usd)
-        )),
-        quote => {
-            call.note(format!(
-                "this pool trades against {quote_symbol}, not ETH or USDG: candles are {quote_symbol} prices converted at today's rate, so their moves include {quote_symbol}'s own moves"
-            ));
-            let moves = Dex::new(rt)
-                .token_pools(call, quote)
-                .ok()
-                .and_then(|pools| main_pool(&pools, quote).map(|p| p.change))
-                .map(|c| json!({"h1": c.h1.map(one), "h6": c.h6.map(one), "h24": c.h24.map(one)}));
-            json!({
-                "quote": quote_symbol,
-                "converted_at_usd": sig(market.quote_usd),
-                "quote_change_pct": moves,
-                "read": "USD change of the token ≈ candle change combined with the quote's change; prefer the snapshot's change_pct for USD moves"
-            })
-        }
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-/// The explicit pool, else the token's most active pool, else its Pons curve
-/// while it is still bonding, else its deepest (possibly dead) pool.
-fn select_pool(
-    rt: &Runtime,
-    call: &mut Call,
-    token: &str,
-    pool_id: Option<&str>,
-) -> Result<Snapshot, ProviderError> {
-    let pools = Dex::new(rt)
-        .token_pools(call, token)
-        .unwrap_or_else(|error| {
-            call.note(format!("DexScreener unavailable: {}", error.message));
-            vec![]
-        });
-    let explicit =
-        |pools: &[Snapshot]| pool_id.and_then(|id| pools.iter().find(|p| p.pool_id == id).cloned());
-    if let Some(pool) = explicit(&pools).or_else(|| {
-        pool_id
-            .is_none()
-            .then(|| main_pool(&pools, token).cloned())
-            .flatten()
-    }) {
-        return Ok(pool);
+    #[test]
+    fn ranges_give_24_to_60_bars() {
+        for r in [Range::H1, Range::H6, Range::H24, Range::D7, Range::D30] {
+            let (_, _, bars) = plan(r, 0);
+            assert!((24..=60).contains(&bars));
+        }
+        assert_eq!(plan(Range::Life, 3 * 3600).0, "5");
+        assert_eq!(plan(Range::Life, 40 * 86_400).0, "1D");
     }
-    let launch = Gecko::new(rt).token(call, token);
-    let found = match &launch {
-        Ok((_, launch_pools)) if pool_id.is_some() => explicit(launch_pools),
-        Ok((lifecycle, launch_pools)) if lifecycle.stage == "curve" => launch_pools
-            .iter()
-            .find(|p| p.kind == Some("curve"))
-            .cloned(),
-        Ok((_, launch_pools)) => main_pool(launch_pools, token).cloned(),
-        Err(_) => None,
-    };
-    if let Some(pool) = found.or_else(|| {
-        pool_id
-            .is_none()
-            .then(|| deepest_pool(&pools, token).cloned())
-            .flatten()
-    }) {
-        return Ok(pool);
+
+    #[test]
+    fn facts_from_bars() {
+        let s = |v: &[f64]| v.iter().map(|x| Some(*x)).collect::<Vec<_>>();
+        let f = facts(
+            &s(&[1.0, 2.0, 3.0]),
+            &s(&[2.0, 4.0, 3.5]),
+            &s(&[0.9, 1.8, 2.5]),
+            &s(&[2.0, 3.0, 3.0]),
+            &s(&[10.0, 10.0, 30.0]),
+        );
+        assert_eq!(f["change_pct"], json!(200.0));
+        assert_eq!(f["from_high_pct"], json!(-25.0));
+        assert_eq!(f["volume_last_vs_first_third_x"], json!(3.0));
     }
-    Err(match launch {
-        Err(error) if pools.is_empty() => error,
-        _ if pool_id.is_some() => ProviderError::new(
-            "POOL_NOT_FOUND",
-            "that pool_id is not a known pool of this token",
-        ),
-        _ => ProviderError::new("NOT_FOUND", "no chartable pool trades this token"),
-    })
 }

@@ -5,9 +5,10 @@ Hoodit is a Robinhood Chain trading assistant for token and launchpad discovery,
 ## Repository layout
 
 - `app/` and `public/` — Next.js landing page and product UI
-- `apps/hoodit/` — Rust v1.5 dynamic application loaded by Aomi: `src/tools/`
-  holds the five read tools, `src/market/` decodes swaps into charts and flow,
-  `src/providers/` talks to the public data sources
+- `apps/hoodit/` — Rust v2 dynamic application loaded by Aomi: `src/tools/`
+  holds the nine read tools, `src/market.rs` the shared token logic,
+  `src/providers.rs` the Codex, LI.FI and chain transport, `src/shape.rs` the
+  model-facing JSON rules
 - `tests/evals/` and `scripts/hoodit-eval.py` — conversation evals run on Aomi chat
 - `docs/hoodit-v1-validation.md` — local and sanitized provider evidence, with deployment work called out separately
 - `.aomi/config.json` — Aomi Project manifest used by Build's community repository import
@@ -47,59 +48,59 @@ origin, credential and error boundaries. Wallet signing requires separate tests.
 
 ## Aomi application
 
-The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. Every data source is public and keyless, so the app declares no secrets:
+The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime.
 
 | Source | Used for |
 |---|---|
-| Robinhood Chain RPC | Charts, order flow and trading wallets, decoded from swap logs (Uniswap v2/v3/v4, PancakeSwap v3, Pons curves). Wide log ranges use the official endpoint; cheap batched reads use a faster public endpoint with the official one as fallback. |
-| DexScreener | Pool snapshots: price, liquidity, FDV, volume and buy/sell counts by window, pool age, search. |
-| GeckoTerminal | Discovery feeds, launchpad stage, and one lifetime candle read per chart (cached ten minutes), because its shared public allowance is about ten requests a minute. |
-| GoPlus | Honeypot simulation, taxes, owner powers, and labelled top holders. |
-| LI.FI | Read-only exit quotes at the trade's slippage tolerance. |
+| [Codex](https://docs.codex.io) GraphQL | Boards, token cards, candles (curve phase included), trades with the real wallet behind ERC-4337 bundles, holders, top traders, wallet records. Every request is paid with MPP: $0.001 in USDC.e on Tempo from the operator wallet, several aliased queries billed once. |
+| Robinhood Chain RPC | The Pons V2 launch record (true stage, pair token, graduation target, deployer) and curve reserve, so `curve_pct` matches what Pons shows; token decimals and symbols; contract checks for holder labels. |
+| LI.FI | Exit quotes for `hoodit_exit`: a round trip at the user's size, loss measured in ETH. The host's own LI.FI tools still do the trading. |
+| GoPlus | Contract security, only for tokens deployed outside a launchpad. |
 
-Wallet balances come from the host's `get_erc20_holdings`, and trades use the host's execution flow.
+Two operator secrets, set per application in Aomi Build → Environment:
+
+| Secret | Value |
+|---|---|
+| `CODEX_MPP_KEY` | Private key of the wallet that pays for Codex requests on Tempo (chain 4217, USDC.e). Keep only a few dollars on it. |
+| `LIFI_API_KEY` | LI.FI integrator key. Without it quotes fall back to the keyless allowance (about 40 an hour). |
+
+Missing secrets make the affected tools return `UNCONFIGURED` instead of failing
+the app. Spend is capped in-process: ten paid requests per answer and 5,000 per
+host per UTC day, with stale cache served when a provider fails.
+
+Nine read tools, none owned by a skill so they work in every thread:
+
+| Tool | Answers |
+|---|---|
+| `hoodit_scan` | What's moving, new, on a curve, or just graduated, with filters |
+| `hoodit_find` | Which contract a ticker means (ranked by holders; copycats listed) |
+| `hoodit_token` | The card: stage, curve %, trade support, market, flow, holder mix, dev, security |
+| `hoodit_chart` | Candles for a range plus facts computed from the same bars |
+| `hoodit_trades` | Buy and sell dollars by window and the largest trades with wallets |
+| `hoodit_holders` | Top holders with contract labels and top traders, or the dev's launches |
+| `hoodit_wallet` | A wallet's record and bag |
+| `hoodit_exit` | Whether a size gets back out, in ETH |
+| `hoodit_check` | Flat numbers for watchers (`wake_on_condition`) |
+
+The always-on preamble sets the voice and evidence rules; three short skills
+(`hoodit/research`, `hoodit/trade`, `hoodit/watch`) are playbooks. Every reply
+stays under 2,500 characters because guest chats share a 64 kB model input with
+the whole history.
 
 ```bash
-cargo test -p hoodit --lib
-cargo clippy -p hoodit --lib --tests -- -D warnings
+cargo test -p hoodit
+cargo clippy --workspace --all-targets -- -D warnings
 aomi-build sdk check --path . --required-version 5.1.1
 ```
 
-The app exposes one skill, `hoodit/research`, with five read tools:
-`hoodit_discover` (trending, new, Pons launchpad and volume feeds with setup
-flags), `hoodit_search`, `hoodit_get_token` (snapshot, launchpad stage,
-security), `hoodit_get_chart` (candles, structure, order flow and wallets from
-on-chain swaps) and `hoodit_check_exit`. The tools compute setup flags such as
-`extended`, `fading`, `churn` and `thin_exit`, so the model weighs a blow-off
-top as late rather than reading momentum as quality.
-
-Same-ticker copycats are common on Robinhood Chain: a scam contract reuses a
-real coin's name, parks deep liquidity nobody trades, and often stays mintable.
-`hoodit_search` resolves the real contract from its share of the ticker's
-trading volume and its DexScreener profile and lists copycats apart, and
-`hoodit_get_token` flags `parked_liquidity` and `copycat_risk` when a pasted
-contract looks like one.
-
-Trades fill a minute or two after the host simulates them, so `hoodit_get_token`
-and `hoodit_check_exit` size a slippage tolerance for that wait: one typical
-5-minute move (from DexScreener's 5m and 1h changes), floored by pool depth
-(0.5% at $250k+ liquidity up to 3% for thin pools and Pons curves). Hoodit
-suggests at most 5%, uses up to 10% only when the user explicitly agrees, and
-flags anything needing more as `too_volatile`. The skill tells the model to pass
-`slippage_bps` explicitly to the host's LI.FI tools, re-quote at the same
-tolerance after a slippage failure, and never widen it unasked.
-
-`hoodit_get_chart` also returns the pool's whole life in a few facts (top,
-distance below it, best bounce, volume against the peak day, and a 12-point
-shape) with a `phase` of `dead`, `bleeding`, `pullback` or `near_top`, so a
-coin that bled out after its pump reads as dead even when its last day looks
-calm.
-
-A live read-only probe runs any tool against public providers:
+A live run calls real tools with real secrets and fails on any reply over the
+size limit (costs about $0.02):
 
 ```bash
-HOODIT_TOOL=hoodit_get_chart HOODIT_ARGS='{"token":"0x..."}' \
-  cargo test -p hoodit --test live_read_smoke -- --ignored --nocapture
+set -a; . ~/.config/hoodit/mpp-test-wallet.env; set +a   # CODEX_MPP_KEY
+export LIFI_API_KEY=...
+cargo run -p hoodit --example live -- apps/hoodit/examples/live-plan.json
+cargo run -p hoodit --example gql -- '{ ... }'           # one raw Codex query
 ```
 
 ### Conversation evals

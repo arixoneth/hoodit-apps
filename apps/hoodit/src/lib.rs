@@ -1,17 +1,61 @@
 use aomi_sdk::*;
 mod amount;
 pub mod app;
-pub mod market;
-mod model;
+mod market;
 mod providers;
+mod shape;
 pub mod tools;
 
 const PREAMBLE: &str = include_str!("preamble.md");
+
+const CODEX: Secret = Secret::new(
+    app::CODEX_KEY,
+    "Payment key for the operator's Codex market-data wallet (MPP on Tempo)",
+    false,
+);
+const LIFI: Secret = Secret::new(
+    app::LIFI_KEY,
+    "LI.FI integrator API key for exit quotes",
+    false,
+);
+
 dyn_aomi_app!(
-    app = app::HooditApp, name = "hoodit", version = "1.5.0", preamble = PREAMBLE,
-    tools = [], secrets = [], namespaces = ["aomi-core", "evm-core"],
+    app = app::HooditApp,
+    name = "hoodit",
+    version = "2.0.0",
+    preamble = PREAMBLE,
+    tools = [
+        tools::Scan,
+        tools::Find,
+        tools::Token,
+        tools::Chart,
+        tools::Trades,
+        tools::Holders,
+        tools::Wallet,
+        tools::Exit,
+        tools::Check
+    ],
+    secrets = [CODEX, LIFI],
+    namespaces = ["aomi-core", "evm-core"],
     skills = [
-        { id: "hoodit/research", description: "Find, check, and judge Robinhood Chain coins: what to ape or watch, fresh Pons launches and curves near graduation, opinions on a ticker or contract, real charts and order flow from on-chain swaps, who is buying or dumping, contract and holder risk, and whether a size can actually be exited", tags: ["markets", "coins", "scanner", "launchpad", "pons", "chart", "flow", "security", "exit"], tools: [tools::Discover, tools::Search, tools::GetToken, tools::GetChart, tools::CheckExit], sections: { instructions: "skills/research.md" }, },
+        {
+            id: "hoodit/research",
+            description: "Scan Robinhood Chain memecoins and judge one: what's moving or launching, Pons curves near graduation, opinions on a ticker or contract, charts, who is buying or dumping, holders and the dev, bag checks, and whether a size can get out. Load for any coin question.",
+            tags: ["memecoins", "robinhood", "scan", "pons", "chart", "holders", "exit"],
+            sections: { instructions: "skills/research.md" },
+        },
+        {
+            id: "hoodit/trade",
+            description: "Buy or sell a Robinhood Chain memecoin the user explicitly asked to trade. Load together with the host lifi_swap skill.",
+            tags: ["buy", "sell", "ape", "swap", "slippage"],
+            sections: { instructions: "skills/trade.md" },
+        },
+        {
+            id: "hoodit/watch",
+            description: "Set, list or cancel alerts on a Robinhood Chain coin: tell me when the curve hits X%, the price crosses a level, the dev sells, liquidity drops.",
+            tags: ["alert", "watch", "notify", "remind"],
+            sections: { instructions: "skills/watch.md" },
+        },
     ],
 );
 
@@ -20,19 +64,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn manifest_has_one_skill_owning_five_read_tools() {
+    fn manifest_has_nine_unowned_tools_and_small_skills() {
         let manifest = app::HooditApp::default().manifest();
-        assert_eq!(manifest.version, "1.5.0");
-        assert_eq!(manifest.skills.len(), 1);
+        assert_eq!(manifest.version, "2.0.0");
         let names: Vec<&str> = manifest.tools.iter().map(|t| t.name.as_str()).collect();
         assert_eq!(
             names,
             [
-                "hoodit_discover",
-                "hoodit_search",
-                "hoodit_get_token",
-                "hoodit_get_chart",
-                "hoodit_check_exit"
+                "hoodit_scan",
+                "hoodit_find",
+                "hoodit_token",
+                "hoodit_chart",
+                "hoodit_trades",
+                "hoodit_holders",
+                "hoodit_wallet",
+                "hoodit_exit",
+                "hoodit_check"
             ]
         );
         assert!(
@@ -41,19 +88,34 @@ mod tests {
                 .iter()
                 .all(|t| t.parameters_schema["additionalProperties"] == false)
         );
-        assert!(manifest.secrets.as_ref().is_none_or(Vec::is_empty));
-        for leaked in ["hoodit_", "GeckoTerminal", "DexScreener", "LI.FI"] {
-            assert!(
-                !manifest.preamble.contains(leaked),
-                "tool detail leaked into preamble: {leaked}"
-            );
+        for skill in &manifest.skills {
+            let chars: usize = skill.sections.iter().map(|s| s.content.len()).sum();
+            assert!(chars < 7000, "{} is {chars} chars", skill.id);
         }
-        let skill = &manifest.skills[0];
-        assert!(
-            skill
-                .sections
-                .iter()
-                .any(|s| s.content.contains("hoodit_get_chart"))
-        );
+        assert!(manifest.preamble.len() < 3000);
+    }
+
+    /// The host makes every property required, so optional ones must accept null.
+    #[test]
+    fn optional_arguments_accept_null() {
+        let manifest = app::HooditApp::default().manifest();
+        for tool in &manifest.tools {
+            let schema = &tool.parameters_schema;
+            let required: Vec<&str> = schema["required"]
+                .as_array()
+                .map(|r| r.iter().filter_map(|v| v.as_str()).collect())
+                .unwrap_or_default();
+            for (name, prop) in schema["properties"].as_object().unwrap() {
+                if required.contains(&name.as_str()) {
+                    continue;
+                }
+                let text = prop.to_string();
+                assert!(
+                    text.contains("\"null\""),
+                    "{}.{name} is optional but not nullable: {text}",
+                    tool.name
+                );
+            }
+        }
     }
 }

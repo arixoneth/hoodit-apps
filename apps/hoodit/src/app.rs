@@ -1,136 +1,227 @@
-use reqwest::blocking::Client;
-use reqwest::header::{ACCEPT, HeaderMap, HeaderValue, USER_AGENT};
+//! Process-wide runtime shared by every user and thread on a backend host:
+//! one HTTP client, one async runtime, a TTL cache, per-turn request
+//! budgets and a daily paid-request cap.
+use aomi_sdk::DynToolCallCtx;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-const CACHE_CAPACITY: usize = 2048;
+const CACHE_CAPACITY: usize = 4096;
+/// Paid Codex requests one turn may make before tools return partial data.
+pub const TURN_REQUEST_BUDGET: u32 = 10;
+/// Paid Codex requests per host per UTC day (~$0.001 each).
+pub const DAILY_REQUEST_CAP: u32 = 5000;
+/// Keyless LI.FI allows ~100 quotes per 2 h per IP; stay well under it.
+const LIFI_KEYLESS_PER_HOUR: u32 = 40;
 
-#[derive(Clone)]
-pub struct Origins {
-    pub dexscreener: String,
-    pub gecko: String,
-    pub goplus: String,
-    pub rpc: String,
-    /// Low-latency public endpoint for cheap reads; `rpc` is the fallback and
-    /// serves wide log ranges, which this one rejects.
-    pub rpc_fast: String,
-    pub lifi: String,
+pub const CODEX_KEY: &str = "CODEX_MPP_KEY";
+pub const LIFI_KEY: &str = "LIFI_API_KEY";
+
+/// How long a class of data stays fresh.
+#[derive(Clone, Copy)]
+pub enum Ttl {
+    Live,
+    Minute,
+    Search,
+    Slow,
+    Forever,
 }
-impl Default for Origins {
-    fn default() -> Self {
-        Self {
-            dexscreener: "https://api.dexscreener.com".into(),
-            gecko: "https://api.geckoterminal.com/api/v2".into(),
-            goplus: "https://api.gopluslabs.io/api/v1".into(),
-            rpc: "https://rpc.mainnet.chain.robinhood.com".into(),
-            rpc_fast: "https://rpc.ordofi.network".into(),
-            lifi: "https://li.quest/v1".into(),
-        }
+impl Ttl {
+    fn duration(self) -> Duration {
+        Duration::from_secs(match self {
+            Ttl::Live => 20,
+            Ttl::Minute => 60,
+            Ttl::Search => 180,
+            Ttl::Slow => 1800,
+            Ttl::Forever => 7 * 24 * 3600,
+        })
     }
 }
 
-/// Requests allowed per window for each provider, below the published public
-/// allowances so one process never trips them on its own.
-fn allowance(provider: &str) -> Option<(u32, Duration)> {
-    Some(match provider {
-        "geckoterminal" => (9, Duration::from_secs(60)),
-        "goplus" => (30, Duration::from_secs(60)),
-        "dexscreener" => (240, Duration::from_secs(60)),
-        "rpc" => (120, Duration::from_secs(60)),
-        "rpc-fast" => (1500, Duration::from_secs(60)),
-        "lifi" => (70, Duration::from_secs(7200)),
-        _ => return None,
-    })
+struct Day {
+    day: i64,
+    used: u32,
 }
 
 pub struct Runtime {
-    pub http: Client,
-    pub origins: Origins,
+    pub http: reqwest::Client,
+    pub tokio: tokio::runtime::Runtime,
     cache: Mutex<HashMap<String, (Instant, Value)>>,
-    rates: Mutex<HashMap<String, (Instant, u32)>>,
+    turns: Mutex<HashMap<String, u32>>,
+    spend: Mutex<Day>,
+    lifi_window: Mutex<(Instant, u32)>,
+    tempo: Mutex<Option<(String, Arc<mpp::client::TempoProvider>)>>,
 }
+
 impl Runtime {
-    pub fn new(http: Client, origins: Origins) -> Self {
-        Self {
+    fn new() -> Result<Self, String> {
+        let http = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(4))
+            .timeout(Duration::from_secs(45))
+            .user_agent("hoodit/2.0")
+            .build()
+            .map_err(|_| "HTTP client initialization failed".to_string())?;
+        let tokio = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .map_err(|_| "async runtime initialization failed".to_string())?;
+        Ok(Self {
             http,
-            origins,
+            tokio,
             cache: Mutex::new(HashMap::new()),
-            rates: Mutex::new(HashMap::new()),
-        }
+            turns: Mutex::new(HashMap::new()),
+            spend: Mutex::new(Day { day: 0, used: 0 }),
+            lifi_window: Mutex::new((Instant::now(), 0)),
+            tempo: Mutex::new(None),
+        })
     }
-    pub(crate) fn cached(&self, key: &str) -> Option<Value> {
-        let mut cache = self.cache.lock().ok()?;
-        match cache.get(key) {
-            Some((expires, value)) if *expires > Instant::now() => Some(value.clone()),
-            Some(_) => {
-                cache.remove(key);
-                None
-            }
-            None => None,
-        }
+
+    pub fn cached(&self, key: &str) -> Option<Value> {
+        let cache = self.cache.lock().ok()?;
+        cache
+            .get(key)
+            .filter(|(expires, _)| *expires > Instant::now())
+            .map(|(_, v)| v.clone())
     }
-    pub(crate) fn store(&self, key: String, value: Value, ttl: Duration) {
+
+    /// Last known value even if expired, for stale-on-error answers.
+    pub fn stale(&self, key: &str) -> Option<Value> {
+        self.cache.lock().ok()?.get(key).map(|(_, v)| v.clone())
+    }
+
+    pub fn store(&self, key: String, value: Value, ttl: Ttl) {
         let Ok(mut cache) = self.cache.lock() else {
             return;
         };
         if cache.len() >= CACHE_CAPACITY {
             let now = Instant::now();
             cache.retain(|_, (expires, _)| *expires > now);
-            if cache.len() >= CACHE_CAPACITY
-                && let Some(soonest) = cache
-                    .iter()
-                    .min_by_key(|(_, (expires, _))| *expires)
-                    .map(|(key, _)| key.clone())
-            {
-                cache.remove(&soonest);
+            if cache.len() >= CACHE_CAPACITY {
+                let drop: Vec<String> = cache.keys().take(CACHE_CAPACITY / 8).cloned().collect();
+                for key in drop {
+                    cache.remove(&key);
+                }
             }
         }
-        cache.insert(key, (Instant::now() + ttl, value));
+        cache.insert(key, (Instant::now() + ttl.duration(), value));
     }
-    /// Spends `cost` requests from the provider's window; false when exhausted.
-    pub(crate) fn take(&self, provider: &str, cost: u32) -> bool {
-        let Some((limit, window)) = allowance(provider) else {
+
+    /// Reserves one paid request for this turn and today. `Err` explains
+    /// which budget ran out.
+    pub fn spend(&self, turn: &str) -> Result<(), &'static str> {
+        let today = crate::shape::now() / 86_400;
+        {
+            let mut day = self.spend.lock().map_err(|_| "spend lock poisoned")?;
+            if day.day != today {
+                *day = Day {
+                    day: today,
+                    used: 0,
+                };
+            }
+            if day.used >= DAILY_REQUEST_CAP {
+                return Err("daily data budget used up");
+            }
+            day.used += 1;
+        }
+        let mut turns = self.turns.lock().map_err(|_| "turn lock poisoned")?;
+        if turns.len() > 512 {
+            turns.clear();
+        }
+        let used = turns.entry(turn.to_string()).or_insert(0);
+        if *used >= TURN_REQUEST_BUDGET {
+            return Err("this answer's data budget is used up");
+        }
+        *used += 1;
+        Ok(())
+    }
+
+    /// Keyless LI.FI pacing; keyed calls are not limited here.
+    pub fn lifi_slot(&self, keyed: bool) -> bool {
+        if keyed {
             return true;
-        };
-        let Ok(mut rates) = self.rates.lock() else {
+        }
+        let Ok(mut window) = self.lifi_window.lock() else {
             return false;
         };
-        let now = Instant::now();
-        let (started, used) = rates.entry(provider.into()).or_insert((now, 0));
-        if now.duration_since(*started) >= window {
-            *started = now;
-            *used = 0;
+        if window.0.elapsed() >= Duration::from_secs(3600) {
+            *window = (Instant::now(), 0);
         }
-        if *used + cost > limit {
+        if window.1 >= LIFI_KEYLESS_PER_HOUR {
             return false;
         }
-        *used += cost;
+        window.1 += 1;
         true
+    }
+
+    /// Tempo payment provider for the operator's MPP wallet, built once per key.
+    pub fn tempo(&self, key: &str) -> Result<Arc<mpp::client::TempoProvider>, String> {
+        let mut slot = self
+            .tempo
+            .lock()
+            .map_err(|_| "payment lock poisoned".to_string())?;
+        if let Some((cached_key, provider)) = slot.as_ref()
+            && cached_key == key
+        {
+            return Ok(provider.clone());
+        }
+        let signer: mpp::PrivateKeySigner = key
+            .trim()
+            .parse()
+            .map_err(|_| "data provider payment key is invalid".to_string())?;
+        let provider = mpp::client::TempoProvider::new(signer, "https://rpc.tempo.xyz")
+            .map_err(|_| "data provider payment setup failed".to_string())?
+            .with_client_id("hoodit");
+        let provider = Arc::new(provider);
+        *slot = Some((key.to_string(), provider.clone()));
+        Ok(provider)
     }
 }
 
-/// Per-tool-call deadline and the coverage notes the answer must disclose.
+/// Per-tool-call context: credentials, the turn it belongs to, the user's
+/// connected wallet, and the gaps the answer must disclose.
 pub struct Call {
-    pub deadline: Instant,
-    pub notes: Vec<String>,
+    pub turn: String,
+    pub codex_key: Option<String>,
+    pub lifi_key: Option<String>,
+    pub wallet: Option<String>,
+    pub gaps: Vec<String>,
 }
+
 impl Call {
-    pub fn new(seconds: u64) -> Self {
+    pub fn new(ctx: &DynToolCallCtx) -> Self {
+        let secret = |name: &str| {
+            aomi_sdk::resolve_secret_value(ctx, None, name, "")
+                .ok()
+                .map(|v| v.trim().trim_matches(|c| c == '"' || c == '\'').to_string())
+                .filter(|v| !v.is_empty())
+        };
+        let turn = ctx
+            .attribute_path(&["hosted", "turn_id"])
+            .and_then(|v| {
+                v.as_str()
+                    .map(str::to_string)
+                    .or_else(|| Some(v.to_string()))
+            })
+            .unwrap_or_else(|| ctx.call_id.clone());
+        let wallet = ctx
+            .attribute_path(&["domain", "evm", "address"])
+            .and_then(Value::as_str)
+            .and_then(|a| crate::shape::address(a).ok());
         Self {
-            deadline: Instant::now() + Duration::from_secs(seconds),
-            notes: vec![],
+            turn,
+            codex_key: secret(CODEX_KEY),
+            lifi_key: secret(LIFI_KEY),
+            wallet,
+            gaps: vec![],
         }
     }
-    pub fn remaining(&self) -> Option<Duration> {
-        let left = self.deadline.saturating_duration_since(Instant::now());
-        (!left.is_zero()).then_some(left)
-    }
-    pub fn note(&mut self, note: impl Into<String>) {
-        let note = note.into();
-        if !self.notes.contains(&note) {
-            self.notes.push(note);
+
+    pub fn gap(&mut self, gap: impl Into<String>) {
+        let gap = gap.into();
+        if !self.gaps.contains(&gap) {
+            self.gaps.push(gap);
         }
     }
 }
@@ -139,31 +230,13 @@ impl Call {
 pub struct HooditApp {
     runtime: Arc<OnceLock<Result<Arc<Runtime>, String>>>,
 }
+
 impl HooditApp {
     pub fn runtime(&self) -> Result<Arc<Runtime>, String> {
-        self.runtime.get_or_init(build_runtime).clone()
+        self.runtime
+            .get_or_init(|| Runtime::new().map(Arc::new))
+            .clone()
     }
-    #[doc(hidden)]
-    pub fn with_runtime(runtime: Runtime) -> Self {
-        let slot = OnceLock::new();
-        let _ = slot.set(Ok(Arc::new(runtime)));
-        Self {
-            runtime: Arc::new(slot),
-        }
-    }
-}
-
-fn build_runtime() -> Result<Arc<Runtime>, String> {
-    let mut headers = HeaderMap::new();
-    headers.insert(ACCEPT, HeaderValue::from_static("application/json"));
-    headers.insert(USER_AGENT, HeaderValue::from_static("hoodit/1.5"));
-    Client::builder()
-        .connect_timeout(Duration::from_secs(3))
-        .timeout(Duration::from_secs(12))
-        .default_headers(headers)
-        .build()
-        .map(|http| Arc::new(Runtime::new(http, Origins::default())))
-        .map_err(|_| "HTTP client initialization failed".to_string())
 }
 
 #[cfg(test)]
@@ -172,26 +245,20 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    fn cache_expires_and_stays_bounded() {
-        let runtime = Runtime::new(Client::new(), Origins::default());
-        runtime.store("a".into(), json!(1), Duration::from_secs(5));
-        assert_eq!(runtime.cached("a"), Some(json!(1)));
-        runtime.store("b".into(), json!(2), Duration::ZERO);
-        assert_eq!(runtime.cached("b"), None);
-        for index in 0..(CACHE_CAPACITY + 10) {
-            runtime.store(format!("k{index}"), json!(index), Duration::from_secs(5));
+    fn budgets_cap_paid_requests_per_turn() {
+        let rt = Runtime::new().unwrap();
+        for _ in 0..TURN_REQUEST_BUDGET {
+            assert!(rt.spend("t1").is_ok());
         }
-        assert!(runtime.cache.lock().unwrap().len() <= CACHE_CAPACITY);
+        assert!(rt.spend("t1").is_err());
+        assert!(rt.spend("t2").is_ok());
     }
 
     #[test]
-    fn provider_windows_cap_requests() {
-        let runtime = Runtime::new(Client::new(), Origins::default());
-        for _ in 0..9 {
-            assert!(runtime.take("geckoterminal", 1));
-        }
-        assert!(!runtime.take("geckoterminal", 1));
-        assert!(runtime.take("dexscreener", 1));
-        assert!(!runtime.take("rpc", 121));
+    fn cache_expires_but_stays_stale() {
+        let rt = Runtime::new().unwrap();
+        rt.store("k".into(), json!(1), Ttl::Live);
+        assert_eq!(rt.cached("k"), Some(json!(1)));
+        assert_eq!(rt.stale("k"), Some(json!(1)));
     }
 }

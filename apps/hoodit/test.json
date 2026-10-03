@@ -5,7 +5,7 @@
       "prompt": "what can i ape today?",
       "expected_tools": {
         "must_call": [
-          "hoodit_discover"
+          "hoodit_scan"
         ]
       }
     },

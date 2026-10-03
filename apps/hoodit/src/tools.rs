@@ -1,48 +1,52 @@
-use crate::app::{Call, Runtime};
-use crate::model;
-use crate::providers::{ProviderError, dex::Dex};
+use crate::app::{Call, HooditApp, Runtime};
+use aomi_sdk::DynToolCallCtx;
 use serde_json::Value;
+use std::future::Future;
+use std::sync::Arc;
 
 mod chart;
-mod discover;
+mod check;
 mod exit;
-mod search;
+mod find;
+mod holders;
+mod scan;
 mod token;
+mod trades;
+mod wallet;
 
-pub use chart::{ChartArgs, GetChart};
-pub use discover::{Discover, DiscoverArgs};
-pub use exit::{CheckExit, ExitArgs};
-pub use search::{Search, SearchArgs};
-pub use token::{GetToken, TokenArgs};
+pub use chart::Chart;
+pub use check::Check;
+pub use exit::Exit;
+pub use find::Find;
+pub use holders::Holders;
+pub use scan::Scan;
+pub use token::Token;
+pub use trades::Trades;
+pub use wallet::Wallet;
+
+/// Runs an async tool body on the app's runtime and returns its JSON.
+pub(crate) fn exec<F, Fut>(app: &HooditApp, ctx: &DynToolCallCtx, body: F) -> Result<Value, String>
+where
+    F: FnOnce(Arc<Runtime>, Call) -> Fut,
+    Fut: Future<Output = Value>,
+{
+    let rt = app.runtime()?;
+    let call = Call::new(ctx);
+    let value = rt.tokio.block_on(body(rt.clone(), call));
+    Ok(crate::shape::fit(crate::shape::compact(value)))
+}
+
+/// `addr:4663` id Codex uses for tokens on Robinhood Chain.
+pub(crate) fn codex_id(token: &str) -> String {
+    format!("{token}:{}", crate::providers::NETWORK)
+}
 
 macro_rules! arg {
     ($value:expr) => {
         match $value {
             Ok(value) => value,
-            Err(message) => return Ok($crate::model::error("INVALID_ARGUMENT", &message, false)),
+            Err(message) => return crate::shape::error("INVALID_ARGUMENT", &message, None),
         }
     };
 }
 pub(crate) use arg;
-
-pub(crate) fn failure(error: ProviderError) -> Value {
-    model::error(error.code, &error.message, error.retryable())
-}
-
-pub(crate) fn now() -> i64 {
-    chrono::Utc::now().timestamp()
-}
-
-/// ETH in USD from the deepest WETH pool, for pools DexScreener doesn't price.
-pub(crate) fn eth_usd(rt: &Runtime, call: &Call) -> Option<f64> {
-    let pools = Dex::new(rt).token_pools(call, model::WETH).ok()?;
-    pools
-        .iter()
-        .filter(|s| s.token == model::WETH && s.price_usd.is_some())
-        .max_by(|a, b| {
-            a.liquidity_usd
-                .unwrap_or(0.0)
-                .total_cmp(&b.liquidity_usd.unwrap_or(0.0))
-        })
-        .and_then(|s| s.price_usd)
-}
