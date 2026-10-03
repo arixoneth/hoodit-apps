@@ -35,19 +35,18 @@ export default function HooditWidget() {
       walletFamilies={["evm"]}
       width="100%"
       height="100%"
+      // Match the frame's inner radius so the corners read as one edge.
+      style={{ borderRadius: 10, boxShadow: "none" }}
       showHeader
       showSidebar
       walletPosition="footer"
-      // Hoodit runs on the backend's default model; no picker.
-      controlBarProps={{ hideModel: true }}
+      // Hoodit runs on the backend's default model and declares no user secrets.
+      controlBarProps={{ hideModel: true, hideAppSecrets: true }}
       routing={routing}
       // Hoodit pins its own cream palette in app.css, so the widget's
       // light/dark toggle would have no visible effect. The capability
       // library would offer other Aomi apps inside a Hoodit-only chat.
       features={{ theme: false, library: false }}
-      // Guest credentials are page-scoped: never revive a conversation
-      // owned by a previous anonymous identity after a reload.
-      persistThread={false}
     />
   );
 }

@@ -71,8 +71,6 @@
 .app-chain i { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
 .app-back { margin-left: auto; font: 700 11px var(--font-mono); text-transform: uppercase; border-bottom: 3px solid var(--salmon); padding-bottom: 2px; }
 .app-frame { width: min(1440px, calc(100% - 48px)); height: max(540px, calc(100dvh - 160px)); margin: 18px auto 14px; border: 2px solid var(--ink); border-radius: 12px; box-shadow: 6px 6px 0 var(--ink); overflow: hidden; background: white; }
-/* The widget root ships rounded-4xl + a drop shadow; match the frame's inner radius so the corners read as one edge. */
-.app-frame .rounded-4xl.bg-aomi-bg { border-radius: 10px; box-shadow: none; }
 .app-foot { width: min(1440px, calc(100% - 48px)); margin: 0 auto; padding: 8px 0 16px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--ink-soft); font: 700 10px/1.5 var(--font-mono); }
 .app-foot b { color: var(--ink); }
 @media (max-width: 700px) {

@@ -42,8 +42,9 @@ session ownership from the origin-bound session bearer.
 | `NEXT_PUBLIC_HOODIT_APP_ID` | `2938613` | Hoodit application id on that host |
 | `NEXT_PUBLIC_PRIVY_APP_ID` | unset | Enables Privy sign-in; browser wallets otherwise |
 
-Guest credentials are page-scoped, so reloading starts a fresh conversation;
-local thread-ID persistence is disabled to avoid restoring another guest's session.
+Guest credentials are page-scoped, so reloading starts a fresh conversation.
+The widget restores the active thread on reload only for a signed-in account,
+scoped to that account, so one guest never sees another's conversation.
 
 Assistant UI dependencies are pinned through `overrides` to avoid the render
 loop and incompatible Markdown peer dependency in the freely resolved versions.
