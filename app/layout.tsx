@@ -14,30 +14,20 @@ const siteUrl = productionHost
   ? `https://${productionHost}`
   : "http://localhost:3000";
 
+const title = "Hoodit — Talk it. Trade it.";
+const shareDescription = "AI trading on Robinhood Chain.";
+
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "Hoodit — Talk it. Trade it.",
-  description:
-    "Talk to an AI trading agent, review the transaction, and trade stocks on Robinhood Chain from Telegram or the web.",
+  title,
+  description: "Research tokens, read your wallet, and trade on Robinhood Chain with an AI agent.",
   openGraph: {
-    title: "Hoodit — Talk it. Trade it.",
-    description: "AI trading on Robinhood Chain, in Telegram and on the web.",
+    title,
+    description: shareDescription,
     type: "website",
-    images: [
-      {
-        url: `${siteUrl}/og.png`,
-        width: 1672,
-        height: 941,
-        alt: "Hoodit — Talk it. Trade it.",
-      },
-    ],
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: title }],
   },
-  twitter: {
-    card: "summary_large_image",
-    title: "Hoodit — Talk it. Trade it.",
-    description: "AI trading on Robinhood Chain, in Telegram and on the web.",
-    images: [`${siteUrl}/og.png`],
-  },
+  twitter: { card: "summary_large_image", title, description: shareDescription, images: ["/og.png"] },
 };
 
 export default function RootLayout({
