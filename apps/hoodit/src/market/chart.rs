@@ -189,6 +189,74 @@ pub fn earlier(points: &[(i64, f64)], candles: &[Candle], lookback_ts: i64, now:
     })
 }
 
+/// Points in the lifetime shape: enough to see a pump, a bleed or a base.
+const SHAPE_POINTS: usize = 12;
+
+/// The pool's whole life in a few facts: where the top was, how far below it
+/// the price sits, whether any bounce since came close, and whether trading
+/// faded. The detailed window alone can make a bled-out coin look healthy.
+pub fn lifetime(label: &str, candles: &[Candle], now: i64) -> Value {
+    let (Some(first), Some(last)) = (candles.first(), candles.last()) else {
+        return Value::Null;
+    };
+    let top = candles
+        .iter()
+        .max_by(|a, b| a.h.total_cmp(&b.h))
+        .expect("non-empty");
+    let days = |t: i64| (now - t) as f64 / 86_400.0;
+    let from_top_pct = (last.c / top.h - 1.0) * 100.0;
+    // The best rally once a day had passed since the top.
+    let bounce = candles
+        .iter()
+        .filter(|c| c.t >= top.t + 86_400)
+        .map(|c| c.h)
+        .max_by(f64::total_cmp)
+        .map(|h| h / top.h * 100.0);
+    // Volume per 24h, counted back from now so the last bucket is a full day.
+    let mut daily: Vec<f64> = vec![];
+    for c in candles {
+        let day = ((now - c.t).max(0) / 86_400) as usize;
+        if daily.len() <= day {
+            daily.resize(day + 1, 0.0);
+        }
+        daily[day] += c.volume;
+    }
+    let peak_day = daily.iter().copied().fold(0.0, f64::max);
+    let volume_vs_peak = (peak_day > 0.0 && daily.len() > 1).then(|| daily[0] / peak_day * 100.0);
+    let step = candles.len().div_ceil(SHAPE_POINTS).max(1);
+    // Each point is the period's high, so the top itself shows in the shape.
+    let shape: Vec<Value> = candles
+        .chunks(step)
+        .map(|chunk| {
+            let high = chunk.iter().map(|c| c.h).fold(0.0, f64::max);
+            json!((high / top.h * 100.0).round() as i64)
+        })
+        .collect();
+    let top_days = days(top.t);
+    let faded = volume_vs_peak.is_some_and(|v| v <= 30.0);
+    let phase = if from_top_pct > -20.0 {
+        "near_top"
+    } else if from_top_pct <= -80.0 && top_days >= 2.0 && faded {
+        "dead"
+    } else if from_top_pct <= -50.0 && bounce.is_none_or(|b| b < 50.0) {
+        "bleeding"
+    } else {
+        "pullback"
+    };
+    json!({
+        "phase": phase,
+        "since_days": one(days(first.t)),
+        "interval": label,
+        "top_usd": sig(top.h),
+        "top_days_ago": one(top_days),
+        "from_top_pct": one(from_top_pct),
+        "best_bounce_pct_of_top": bounce.map(one),
+        "volume_24h_vs_peak_day_pct": volume_vs_peak.map(one),
+        "x_from_first_price": one(last.c / first.o),
+        "highs_pct_of_top": shape,
+    })
+}
+
 #[derive(Default)]
 struct Tally {
     buys: u32,
@@ -290,6 +358,43 @@ pub fn flow(swaps: &[Swap], market: &Market, now: i64) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn lifetime_candle(hours: i64, price: f64, volume: f64) -> Candle {
+        Candle {
+            t: 10 * 86_400 - hours * 3600,
+            o: price,
+            h: price,
+            l: price,
+            c: price,
+            volume,
+            buys: 0,
+            sells: 0,
+        }
+    }
+
+    #[test]
+    fn lifetime_calls_a_bled_out_pump_dead() {
+        // Launch eight days ago, a top seven days ago, then a slow bleed on
+        // fading volume: the ROBINPEPE shape.
+        let mut series = vec![lifetime_candle(192, 0.0002, 1e4)];
+        series.push(lifetime_candle(168, 0.0038, 5e6));
+        for (i, hours) in (4..=164).rev().step_by(4).enumerate() {
+            series.push(lifetime_candle(hours, 0.0015 * 0.97f64.powi(i as i32), 4e4));
+        }
+        let out = lifetime("4h", &series, 10 * 86_400);
+        assert_eq!(out["phase"], "dead", "{out}");
+        assert!(out["from_top_pct"].as_f64().unwrap() < -85.0, "{out}");
+        assert_eq!(out["top_days_ago"], 7.0);
+        let highs = out["highs_pct_of_top"].as_array().unwrap();
+        assert_eq!(highs[0], 100, "{out}");
+        assert!(highs.len() <= SHAPE_POINTS);
+        assert!(highs.last().unwrap().as_i64().unwrap() < 15, "{out}");
+
+        let climbing: Vec<Candle> = (0..30)
+            .map(|i| lifetime_candle(120 - i * 4, 0.001 * (1.0 + i as f64 * 0.1), 1e5))
+            .collect();
+        assert_eq!(lifetime("4h", &climbing, 10 * 86_400)["phase"], "near_top");
+    }
 
     fn market() -> Market {
         Market {

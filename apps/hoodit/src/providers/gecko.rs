@@ -1,8 +1,10 @@
-//! GeckoTerminal: discovery feeds and launchpad stage only. Its shared public
-//! allowance is about ten requests a minute, so every read is cached.
+//! GeckoTerminal: discovery feeds, launchpad stage, and a pool's lifetime
+//! candles. Its shared public allowance is about ten requests a minute, so
+//! every read is cached.
 
 use super::{Body, ProviderError, fetch};
 use crate::app::{Call, Runtime};
+use crate::market::chart::Candle;
 use crate::market::{Lifecycle, Snapshot, Win};
 use crate::model::{self, NETWORK};
 use serde_json::{Map, Value};
@@ -67,6 +69,54 @@ impl<'a> Gecko<'a> {
             .flatten()
             .filter_map(|pool| snapshot(pool, &included))
             .collect())
+    }
+    /// The pool's whole recorded life as USD candles of `token`, oldest first:
+    /// hourly for young pools, 4-hourly up to about five months, then daily.
+    pub fn lifetime(
+        &self,
+        call: &Call,
+        pool: &str,
+        token: &str,
+        age_hours: Option<f64>,
+    ) -> Result<(&'static str, Vec<Candle>), ProviderError> {
+        let (label, timeframe, aggregate) = match age_hours {
+            Some(h) if h <= 72.0 => ("1h", "hour", "1"),
+            Some(h) if h > 3900.0 => ("1d", "day", "1"),
+            _ => ("4h", "hour", "4"),
+        };
+        let value = self.get(
+            call,
+            &format!("/networks/{NETWORK}/pools/{pool}/ohlcv/{timeframe}"),
+            &[
+                ("aggregate", aggregate.into()),
+                ("limit", "1000".into()),
+                ("currency", "usd".into()),
+                ("token", token.into()),
+            ],
+            600,
+        )?;
+        let mut candles: Vec<Candle> = model::get(&value, &["data", "attributes", "ohlcv_list"])
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|row| {
+                let n = |i: usize| row.get(i).and_then(Value::as_f64);
+                let price_ok = |p: f64| p.is_finite() && p > 0.0;
+                let (t, o, h, l, c) = (n(0)? as i64, n(1)?, n(2)?, n(3)?, n(4)?);
+                [o, h, l, c].into_iter().all(price_ok).then(|| Candle {
+                    t,
+                    o,
+                    h,
+                    l,
+                    c,
+                    volume: n(5).unwrap_or(0.0),
+                    buys: 0,
+                    sells: 0,
+                })
+            })
+            .collect();
+        candles.sort_by_key(|c| c.t);
+        Ok((label, candles))
     }
     /// Launchpad stage plus the token's indexed top pools.
     pub fn token(

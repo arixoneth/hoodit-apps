@@ -1,7 +1,7 @@
 use super::{arg, eth_usd, failure, now};
 use crate::app::{Call, HooditApp, Runtime};
 use crate::market::chart::{
-    self, auto_interval, candles, earlier, flow, rows, structure, wallet_picks,
+    self, auto_interval, candles, earlier, flow, lifetime, rows, structure, wallet_picks,
 };
 use crate::market::swaps::{self, Market};
 use crate::market::{Snapshot, deepest_pool, main_pool};
@@ -46,7 +46,7 @@ impl DynAomiTool for GetChart {
     type App = HooditApp;
     type Args = ChartArgs;
     const NAME: &'static str = "hoodit_get_chart";
-    const DESCRIPTION: &'static str = "Read a token's real chart and order flow from on-chain swaps in one pool: USD candles, structure facts (range, distance from high and low, rising lows, volume trend, VWAP), buy and sell flow for the last hour and the window, the largest trades, and the wallets doing the most buying and selling. Use it before any claim about chart structure, momentum, or who is selling.";
+    const DESCRIPTION: &'static str = "Read a token's real chart and order flow in one pool: its whole life since launch (top, distance below it, best bounce, fading volume, phase), USD candles from on-chain swaps for the recent window, structure facts (range, distance from high and low, rising lows, volume trend, VWAP), buy and sell flow for the last hour and the window, the largest trades, and the wallets doing the most buying and selling. Use it before any claim about chart structure, momentum, or who is selling.";
 
     fn run(app: &HooditApp, args: ChartArgs, _ctx: DynToolCallCtx) -> Result<Value, String> {
         let token = arg!(model::address(&args.token));
@@ -88,10 +88,18 @@ impl DynAomiTool for GetChart {
             };
         let now = now();
         let pool_view = json!({"pool_id": pool.pool_id, "venue": pool.venue, "pair": pool.pair()});
+        let life = match Gecko::new(&rt).lifetime(&call, &pool.pool_id, &token, pool.age_hours(now))
+        {
+            Ok((label, series)) => lifetime(label, &series, now),
+            Err(error) => {
+                call.note(format!("lifetime chart unavailable: {}", error.message));
+                Value::Null
+            }
+        };
         if found.swaps.is_empty() {
             call.note(format!("no swaps in the last {hours}h in this pool"));
             return Ok(model::ok(
-                json!({"token": token, "pool": pool_view, "hours_requested": hours}),
+                json!({"token": token, "pool": pool_view, "hours_requested": hours, "lifetime": life}),
                 call.notes,
             ));
         }
@@ -130,6 +138,7 @@ impl DynAomiTool for GetChart {
                     format!("every swap of the last {covered}h")
                 },
             },
+            "lifetime": life,
             "interval": label,
             "candles": rows(&series, now),
             "structure": structure(&series, trades, &market, now),

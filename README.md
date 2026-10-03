@@ -53,7 +53,7 @@ The workspace pins `aomi-sdk = "=5.1.1"`, matching the Aomi backend runtime. Eve
 |---|---|
 | Robinhood Chain RPC | Charts, order flow and trading wallets, decoded from swap logs (Uniswap v2/v3/v4, PancakeSwap v3, Pons curves). Wide log ranges use the official endpoint; cheap batched reads use a faster public endpoint with the official one as fallback. |
 | DexScreener | Pool snapshots: price, liquidity, FDV, volume and buy/sell counts by window, pool age, search. |
-| GeckoTerminal | Discovery feeds and launchpad stage only, because its shared public allowance is about ten requests a minute. |
+| GeckoTerminal | Discovery feeds, launchpad stage, and one lifetime candle read per chart (cached ten minutes), because its shared public allowance is about ten requests a minute. |
 | GoPlus | Honeypot simulation, taxes, owner powers, and labelled top holders. |
 | LI.FI | Read-only exit quotes at the trade's slippage tolerance. |
 
@@ -88,6 +88,12 @@ suggests at most 5%, uses up to 10% only when the user explicitly agrees, and
 flags anything needing more as `too_volatile`. The skill tells the model to pass
 `slippage_bps` explicitly to the host's LI.FI tools, re-quote at the same
 tolerance after a slippage failure, and never widen it unasked.
+
+`hoodit_get_chart` also returns the pool's whole life in a few facts (top,
+distance below it, best bounce, volume against the peak day, and a 12-point
+shape) with a `phase` of `dead`, `bleeding`, `pullback` or `near_top`, so a
+coin that bled out after its pump reads as dead even when its last day looks
+calm.
 
 A live read-only probe runs any tool against public providers:
 

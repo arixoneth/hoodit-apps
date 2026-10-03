@@ -58,6 +58,13 @@
       "expect": "Uses the contract search resolves as the real PEPE without asking, warning about copycats in a few words at most; only when search is ambiguous does it list candidates by volume and profile and ask. Never offers a copycat or cites its parked liquidity."
     },
     {
+      "id": "dead_after_pump",
+      "split": "dev",
+      "prompts": ["thoughts on robinpepe 0xa241395adcdf456f6dc04d1bc02b18e6f4c4052c? thinking of buying the dip"],
+      "checks": {"must_call": ["hoodit_get_chart"]},
+      "expect": "Leads with the lifetime: a dead or bleeding coin far below its early top on fading volume, so the dip is not an entry; does not let a calm last day read as a recovery."
+    },
+    {
       "id": "copycat_address",
       "split": "dev",
       "prompts": ["is 0x4dfa90949f32d4c5b90f46e344ef12e959c7416e worth a small bag?"],
