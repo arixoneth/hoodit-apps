@@ -2,13 +2,14 @@
 name = "hoodit"
 version = "2.0.0"
 edition = "2024"
+rust-version = "1.93"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 aomi-sdk = "=5.1.1"
-mpp = { version = "0.13.0", features = ["tempo", "client"] }
+mpp = { version = "=0.11.0", features = ["tempo", "client"] }
 num-bigint = "0.4"
 num-traits = "0.2"
 schemars = "1.2"
