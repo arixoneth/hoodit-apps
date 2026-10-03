@@ -46,10 +46,17 @@ Guest credentials are page-scoped, so reloading starts a fresh conversation.
 The widget restores the active thread on reload only for a signed-in account,
 scoped to that account, so one guest never sees another's conversation.
 
-Assistant UI dependencies are pinned through `overrides` to avoid the render
-loop and incompatible Markdown peer dependency in the freely resolved versions.
-When upgrading, verify rendering and a real read-only chat response in the
-browser, not just a successful build. Wallet signing requires separate tests.
+Two dependency pins are deliberate (re-checked on widget-lib 3.0.10):
+
+- `overrides` holds `@assistant-ui/*` at the versions widget-lib was built
+  against. Freely resolved, `react-markdown` 0.14.18 wants `react` ^0.15 and
+  the chat hits "Maximum update depth exceeded" as soon as a reply streams.
+  The build still passes, so test a real chat reply in the browser.
+- `ox` is an optional peer of `permissionless` (under Privy). npm does not
+  install optional peers, and the build fails with `Can't resolve 'ox'`
+  without the direct dependency.
+
+Wallet signing requires separate tests.
 
 ## Aomi application
 
