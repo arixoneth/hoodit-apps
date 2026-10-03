@@ -59,6 +59,29 @@ const TYPE_DELAY = 18;
 const STEP_DELAY = 620;
 const LOOP_DELAY = 3300;
 
+// Timeline in ms from the start of typing.
+const TYPED_AT = prompt.length * TYPE_DELAY;
+const APPROVE_AT = TYPED_AT + 420 + (steps.length - 1) * STEP_DELAY + 180;
+const COLLAPSE_AT = APPROVE_AT + 2280;
+const COMPLETE_AT = APPROVE_AT + 2680;
+const WORKED_SECONDS = Math.round((COLLAPSE_AT - TYPED_AT) / 1000);
+const TOOL_COUNT = steps.filter((step) => step.kind === "tool").length;
+
+const stepCount = (count: number) => `${count} ${count === 1 ? "step" : "steps"}`;
+
+function StepRow({ step, active = false }: { step: Step; active?: boolean }) {
+  if (step.kind === "note") return <div className="trace-note"><i />{step.text}</div>;
+  return (
+    <div className="trace-tool">
+      <div className="trace-tool-title">
+        {active ? <i className="trace-spinner" /> : <i className="trace-check">✓</i>}
+        <span className={active ? "active" : undefined}>{step.title}</span>
+      </div>
+      <div className="trace-chips">{step.chips.map((chip) => <span key={chip}><i />{chip}</span>)}</div>
+    </div>
+  );
+}
+
 export function ExecutionFixture() {
   const rootRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
@@ -110,19 +133,17 @@ export function ExecutionFixture() {
       });
     }, TYPE_DELAY);
 
-    const afterTyping = prompt.length * TYPE_DELAY + 420;
     steps.slice(0, -1).forEach((_, index) => {
       timers.current.push(
-        window.setTimeout(() => setShown(index + 1), afterTyping + index * STEP_DELAY),
+        window.setTimeout(() => setShown(index + 1), TYPED_AT + 420 + index * STEP_DELAY),
       );
     });
-    const approveAt = afterTyping + (steps.length - 1) * STEP_DELAY + 180;
-    timers.current.push(window.setTimeout(() => setApproval("idle"), approveAt));
-    timers.current.push(window.setTimeout(() => setApproval("pressed"), approveAt + 900));
-    timers.current.push(window.setTimeout(() => setApproval("signed"), approveAt + 1120));
-    timers.current.push(window.setTimeout(() => setShown(steps.length), approveAt + 1620));
-    timers.current.push(window.setTimeout(() => setCollapsed(true), approveAt + 2280));
-    timers.current.push(window.setTimeout(() => setComplete(true), approveAt + 2680));
+    timers.current.push(window.setTimeout(() => setApproval("idle"), APPROVE_AT));
+    timers.current.push(window.setTimeout(() => setApproval("pressed"), APPROVE_AT + 900));
+    timers.current.push(window.setTimeout(() => setApproval("signed"), APPROVE_AT + 1120));
+    timers.current.push(window.setTimeout(() => setShown(steps.length), APPROVE_AT + 1620));
+    timers.current.push(window.setTimeout(() => setCollapsed(true), COLLAPSE_AT));
+    timers.current.push(window.setTimeout(() => setComplete(true), COMPLETE_AT));
     timers.current.push(window.setTimeout(() => {
       setTyped(0);
       setShown(0);
@@ -131,7 +152,7 @@ export function ExecutionFixture() {
       setExpanded(false);
       setComplete(false);
       setRun((value) => value + 1);
-    }, approveAt + 2680 + LOOP_DELAY));
+    }, COMPLETE_AT + LOOP_DELAY));
 
     return () => {
       timers.current.forEach(window.clearTimeout);
@@ -165,28 +186,14 @@ export function ExecutionFixture() {
           <div className="trace-card">
             <div className="trace-header">
               <span className="trace-working">Working</span>
-              {toolCount > 0 && <span>{toolCount} {toolCount === 1 ? "step" : "steps"}</span>}
+              {toolCount > 0 && <span>{stepCount(toolCount)}</span>}
               <b>⌄</b>
             </div>
             {shown > 0 && (
               <div className="trace-viewport">
-                {visible.map((step, index) => {
-                  const active = index === visible.length - 1 && shown < steps.length;
-                  if (step.kind === "note") {
-                    return <div className="trace-note" key={`${run}-${index}`}><i />{step.text}</div>;
-                  }
-                  return (
-                    <div className="trace-tool" key={`${run}-${index}`}>
-                      <div className="trace-tool-title">
-                        {active ? <i className="trace-spinner" /> : <i className="trace-check">✓</i>}
-                        <span className={active ? "active" : ""}>{step.title}</span>
-                      </div>
-                      <div className="trace-chips">
-                        {step.chips.map((chip) => <span key={chip}><i />{chip}</span>)}
-                      </div>
-                    </div>
-                  );
-                })}
+                {visible.map((step, index) => (
+                  <StepRow key={`${run}-${index}`} step={step} active={index === visible.length - 1 && shown < steps.length} />
+                ))}
 
                 {approval !== "hidden" && (
                   <div className="approval-row">
@@ -203,21 +210,14 @@ export function ExecutionFixture() {
 
         {collapsed && (
           <button className="worked-pill" type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded}>
-            <span>✓</span><strong>Worked for 8s</strong><small>7 steps</small><b>{expanded ? "⌃" : "⌄"}</b>
+            <span>✓</span><strong>Worked for {WORKED_SECONDS}s</strong><small>{stepCount(TOOL_COUNT)}</small><b>{expanded ? "⌃" : "⌄"}</b>
           </button>
         )}
 
         {collapsed && expanded && (
           <div className="trace-card expanded-trace">
             <div className="trace-viewport">
-              {steps.map((step, index) => step.kind === "note" ? (
-                <div className="trace-note" key={index}><i />{step.text}</div>
-              ) : (
-                <div className="trace-tool" key={index}>
-                  <div className="trace-tool-title"><i className="trace-check">✓</i><span>{step.title}</span></div>
-                  <div className="trace-chips">{step.chips.map((chip) => <span key={chip}><i />{chip}</span>)}</div>
-                </div>
-              ))}
+              {steps.map((step, index) => <StepRow key={index} step={step} />)}
             </div>
           </div>
         )}
